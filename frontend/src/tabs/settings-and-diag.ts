@@ -2,6 +2,42 @@ import { el, clear, api } from '../utils';
 import { t, getLocale, setLocale, type Locale } from '../i18n';
 import { L } from '../i18n/ui';
 
+async function loadAppRules(section: HTMLElement, status: HTMLElement) {
+  try {
+    const res = await api.get<{ items: Record<string, string>; defaults: Record<string, string> }>('/api/analytics/settings');
+    clear(status);
+    const items = { ...(res.defaults || {}), ...(res.items || {}) };
+    const cycle = el('input', { type: 'number', min: '1', max: '28', value: items.budget_cycle_start_day || '25' }) as HTMLInputElement;
+    const actualsOverride = el('input', { type: 'checkbox', checked: items.dashboard_actuals_override_plans === 'true' ? 'checked' : null }) as HTMLInputElement;
+    const showSplit = el('input', { type: 'checkbox', checked: items.dashboard_card_fixed_split_explained === 'true' ? 'checked' : null }) as HTMLInputElement;
+    const grid = el('div', { class: 'form-grid compact-form app-rules-grid' }, [
+      el('label', { class: 'field' }, [el('span', {}, [L('家計月の開始日', 'Budget cycle start day')]), cycle]),
+      el('label', { class: 'field checkbox-field' }, [actualsOverride, el('span', {}, [L('実績明細と一致した予定支払いは二重計上しない', 'Actual rows override matching plans')])]),
+      el('label', { class: 'field checkbox-field' }, [showSplit, el('span', {}, [L('ダッシュボードでカード実績と固定費予定を分けて説明する', 'Explain card actuals and fixed plans separately')])]),
+    ]);
+    const result = el('div');
+    const save = el('button', { class: 'btn', onClick: async () => {
+      const day = Math.min(28, Math.max(1, Number(cycle.value || 25)));
+      const saved = await api.put<any>('/api/analytics/settings', { items: {
+        budget_cycle_start_day: String(day),
+        dashboard_actuals_override_plans: actualsOverride.checked ? 'true' : 'false',
+        dashboard_card_fixed_split_explained: showSplit.checked ? 'true' : 'false',
+      }});
+      clear(result);
+      result.appendChild(el('div', { class: 'banner banner-info' }, [L(
+        `保存しました。家計月は毎月${saved.items.budget_cycle_start_day}日開始です。`,
+        `Saved. Budget month starts on day ${saved.items.budget_cycle_start_day}.`
+      )]));
+    }}, [t('common.save')]);
+    section.appendChild(grid);
+    section.appendChild(el('div', { class: 'row-flex' }, [save]));
+    section.appendChild(result);
+  } catch (e: any) {
+    clear(status);
+    status.appendChild(el('div', { class: 'banner banner-error' }, [`${L('設定を読み込めませんでした', 'Could not load settings')}: ${e.message}`]));
+  }
+}
+
 export function renderSettings(root: HTMLElement) {
   clear(root);
   root.appendChild(el('h2', {}, [t('tab.settings')]));
@@ -42,6 +78,17 @@ export function renderSettings(root: HTMLElement) {
   }
   langSec.appendChild(langBtns);
   root.appendChild(langSec);
+
+  const appRulesSec = el('div', { class: 'card' });
+  appRulesSec.appendChild(el('h3', {}, [L('アプリ仕様の設定', 'App behavior settings')]));
+  appRulesSec.appendChild(el('p', { class: 'muted' }, [L(
+    'iPhoneから変更しても安全な仕様だけを設定化しています。保存後、ダッシュボードの集計期間や表示説明に反映されます。',
+    'Only safe behavior settings are editable here. Saved values affect dashboard periods and explanatory display.'
+  )]));
+  const appRulesStatus = el('div', { class: 'muted' }, [t('common.loading')]);
+  appRulesSec.appendChild(appRulesStatus);
+  root.appendChild(appRulesSec);
+  loadAppRules(appRulesSec, appRulesStatus);
 
   const exportSec = el('div', { class: 'card' });
   exportSec.appendChild(el('h3', {}, [t('common.export')]));

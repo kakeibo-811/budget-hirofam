@@ -15,6 +15,11 @@ type DashboardData = {
     fixed_total: number;
     scheduled_total?: number;
     other?: number;
+    actual_expense_total?: number;
+    card_expense_total?: number;
+    non_card_actual_expense_total?: number;
+    planned_total?: number;
+    suppressed_planned_total?: number;
   };
   settlement: {
     wife_due_to_husband: number;
@@ -36,6 +41,8 @@ type DashboardData = {
   cashflow?: any;
   assets?: any;
   messages?: any[];
+  settings?: Record<string, string>;
+  aggregation_policy?: { actuals_override_plans?: boolean; card_fixed_split_explained?: boolean; note?: string };
   evidence: any[];
 };
 
@@ -103,6 +110,7 @@ export function renderDashboard(root: HTMLElement) {
         ]),
       ]);
       hero.appendChild(detailGrid);
+      hero.appendChild(aggregationExplanation(data));
       hero.appendChild(el('div', { id: 'wife-transfer-breakdown' }, [transferBreakdown(data.settlement.wife_transfer_lines || [])]));
       content.appendChild(hero);
 
@@ -159,6 +167,42 @@ export function renderDashboard(root: HTMLElement) {
 
   picker.onChange(load);
   load(picker.get());
+}
+
+function aggregationExplanation(data: DashboardData): HTMLElement {
+  const card = el('details', { class: 'card dashboard-aggregation-card', open: true }, [
+    el('summary', {}, [L('集計データの内訳：実績と予定を分けて表示', 'Aggregation: actuals and plans separated')]),
+  ]);
+  card.appendChild(el('p', { class: 'muted' }, [L(
+    '家計合計は「明細に入った実績」と「まだ明細化されていない固定費/予定支払い」を足しています。カード支払いと固定費が混ざって見えないよう、ここで分けて確認できます。',
+    'Household total combines actual expense rows with fixed/scheduled plans that have not yet become actual rows.'
+  )]));
+  const rows: [string, number, string][] = [
+    [L('カード支払いなどの実績明細', 'Actual card payments'), Number(data.household.card_expense_total || 0), L('明細タブに入っているカード払い。支払日/家計月で集計します。', 'Card expenses already entered in Expenses.')],
+    [L('カード以外の実績明細', 'Actual non-card payments'), Number(data.household.non_card_actual_expense_total || 0), L('現金・振込・手入力など、カード以外で明細化済みの支出です。', 'Manual/cash/transfer expenses already entered.')],
+    [L('固定費の予定分', 'Fixed-cost plans'), Number(data.household.fixed_total || 0), L('固定費タブの月次予定。実績明細と一致するものは二重計上しません。', 'Monthly fixed plans. Matching actual rows are not double-counted.')],
+    [L('その他予定支払い', 'Other scheduled plans'), Number(data.household.scheduled_total || 0), L('保険・税金・PayPalなど、固定費以外の予定支払いです。', 'Insurance, tax, PayPal, and other scheduled payments.')],
+  ];
+  const list = el('div', { class: 'settlement-list' });
+  for (const [label, amount, note] of rows) {
+    list.appendChild(el('div', { class: 'settlement-row aggregation-row' }, [
+      el('span', {}, [label, el('small', { class: 'muted' }, [note])]),
+      el('strong', {}, [yenNoSymbol(amount)]),
+    ]));
+  }
+  list.appendChild(el('div', { class: 'settlement-row settlement-total' }, [
+    el('span', {}, [L('家計合計', 'Household total')]),
+    el('strong', {}, [yenNoSymbol(data.household.total)]),
+  ]));
+  const suppressed = Number(data.household.suppressed_planned_total || 0);
+  if (suppressed > 0) {
+    card.appendChild(el('div', { class: 'banner banner-info' }, [L(
+      `実績明細と一致した固定費/予定支払い ${yenNoSymbol(suppressed)} は二重計上から除外済みです。`,
+      `${yenNoSymbol(suppressed)} of plans matched actual expenses and were excluded from double counting.`
+    )]));
+  }
+  card.appendChild(list);
+  return card;
 }
 
 

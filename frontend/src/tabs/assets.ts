@@ -250,6 +250,139 @@ function renderManualMonthlyPlanEditor(defaultMonth: string, onSaved: () => Prom
   return card;
 }
 
+function renderFutureCostEditor(onSaved: () => Promise<void>): HTMLElement {
+  const card = el('details', { class: 'card future-cost-card', open: true }, [
+    el('summary', {}, [L('将来コストを編集', 'Edit future costs')]),
+  ]);
+  card.appendChild(el('p', { class: 'muted' }, [L(
+    '固定資産税・地震保険・火災保険・修繕支出など、資産/負債タブの将来計画に効く予定支払いをここで直接変更できます。',
+    'Edit scheduled future costs that feed the Assets/Liabilities projection, such as property tax, earthquake/fire insurance, and repairs.'
+  )]));
+  const body = el('div', { class: 'muted' }, [L('読み込み中...', 'Loading...')]);
+  card.appendChild(body);
+
+  async function refresh() {
+    clear(body);
+    const data = await api.get<{ items: any[] }>('/api/scheduled-payments');
+    const categories = new Set(['property_tax', 'earthquake_insurance', 'fire_insurance', 'repair_spend']);
+    const rows = (data.items || []).filter((x) => categories.has(String(x.category || '')) || /保険|税|修繕|repair|insurance|tax/i.test(String(x.name || x.note || '')));
+    if (!rows.length) {
+      body.appendChild(el('div', { class: 'muted' }, [L('将来コストがまだありません。下のフォームから追加できます。', 'No future costs yet. Add one below.')]));
+    }
+    const list = el('div', { class: 'future-cost-list' });
+    for (const r of rows) {
+      const name = input(String(r.name || ''), { class: 'wide-input' });
+      const amount = input(String(r.amount || 0), { type: 'number' });
+      const frequency = select([
+        ['monthly', L('毎月', 'Monthly')],
+        ['yearly', L('毎年', 'Yearly')],
+        ['every_3_years', L('3年ごと', 'Every 3 years')],
+        ['every_5_years', L('5年ごと', 'Every 5 years')],
+        ['once', L('1回のみ', 'Once')],
+        ['irregular', L('不定期', 'Irregular')],
+      ], String(r.frequency || 'yearly'));
+      const dueMonth = input(String(r.due_month || ''), { type: 'number', min: '1', max: '12' });
+      const dueDay = input(String(r.due_day || ''), { type: 'number', min: '1', max: '31' });
+      const dueDate = input(String(r.due_date || ''), { type: 'date' });
+      const startYear = input(String(r.recurrence_start_year || ''), { type: 'number', min: '1900' });
+      const note = input(String(r.note || ''), { class: 'wide-input' });
+      const row = el('div', { class: 'future-cost-row' }, [
+        el('label', { class: 'field' }, [el('span', {}, [L('名前', 'Name')]), name]),
+        el('label', { class: 'field' }, [el('span', {}, [L('金額', 'Amount')]), amount]),
+        el('label', { class: 'field' }, [el('span', {}, [L('頻度', 'Frequency')]), frequency]),
+        el('label', { class: 'field' }, [el('span', {}, [L('月', 'Month')]), dueMonth]),
+        el('label', { class: 'field' }, [el('span', {}, [L('日', 'Day')]), dueDay]),
+        el('label', { class: 'field' }, [el('span', {}, [L('1回のみの日付', 'One-time date')]), dueDate]),
+        el('label', { class: 'field' }, [el('span', {}, [L('開始年', 'Start year')]), startYear]),
+        el('label', { class: 'field' }, [el('span', {}, [L('メモ', 'Note')]), note]),
+        el('div', { class: 'row-flex' }, [
+          btn(L('保存', 'Save'), async () => {
+            await api.patch(`/api/scheduled-payments/${r.id}`, {
+              name: name.value,
+              amount: toNumber(amount.value),
+              frequency: frequency.value,
+              due_month: dueMonth.value ? Number(dueMonth.value) : null,
+              due_day: dueDay.value ? Number(dueDay.value) : null,
+              due_date: dueDate.value || null,
+              recurrence_start_year: startYear.value ? Number(startYear.value) : null,
+              interval_years: frequency.value === 'every_3_years' ? 3 : frequency.value === 'every_5_years' ? 5 : null,
+              paid_by: r.paid_by || 'shared',
+              burden_owner: r.burden_owner || 'shared',
+              split: Number(r.split || 1),
+              category: r.category || 'repair_spend',
+              note: note.value,
+              active: r.active ? 1 : 0,
+            });
+            await onSaved();
+          }, false),
+          btn(L('削除', 'Delete'), async () => {
+            if (!confirm(L('この将来コストを削除しますか？', 'Delete this future cost?'))) return;
+            await api.delete(`/api/scheduled-payments/${r.id}`);
+            await onSaved();
+          }),
+        ]),
+      ]);
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+
+    const addName = input('', { placeholder: L('例: 火災保険', 'e.g. Fire insurance') });
+    const addAmount = input('', { type: 'number', placeholder: '300000' });
+    const addFrequency = select([
+      ['yearly', L('毎年', 'Yearly')],
+      ['every_3_years', L('3年ごと', 'Every 3 years')],
+      ['every_5_years', L('5年ごと', 'Every 5 years')],
+      ['once', L('1回のみ', 'Once')],
+      ['monthly', L('毎月', 'Monthly')],
+      ['irregular', L('不定期', 'Irregular')],
+    ], 'yearly');
+    const addMonth = input('', { type: 'number', min: '1', max: '12', placeholder: '6' });
+    const addDay = input('25', { type: 'number', min: '1', max: '31' });
+    const addCategory = select([
+      ['property_tax', L('固定資産税', 'Property tax')],
+      ['earthquake_insurance', L('地震保険', 'Earthquake insurance')],
+      ['fire_insurance', L('火災保険', 'Fire insurance')],
+      ['repair_spend', L('修繕支出', 'Repair spending')],
+    ], 'repair_spend');
+    const addNote = input('', { placeholder: L('メモ', 'Note') });
+    body.appendChild(el('details', { class: 'collapse' }, [
+      el('summary', {}, [L('将来コストを追加', 'Add future cost')]),
+      el('div', { class: 'form-grid compact-form' }, [
+        el('label', { class: 'field' }, [el('span', {}, [L('名前', 'Name')]), addName]),
+        el('label', { class: 'field' }, [el('span', {}, [L('金額', 'Amount')]), addAmount]),
+        el('label', { class: 'field' }, [el('span', {}, [L('頻度', 'Frequency')]), addFrequency]),
+        el('label', { class: 'field' }, [el('span', {}, [L('支払月', 'Payment month')]), addMonth]),
+        el('label', { class: 'field' }, [el('span', {}, [L('支払日', 'Payment day')]), addDay]),
+        el('label', { class: 'field' }, [el('span', {}, [L('分類', 'Category')]), addCategory]),
+        el('label', { class: 'field' }, [el('span', {}, [L('メモ', 'Note')]), addNote]),
+        btn(L('追加', 'Add'), async () => {
+          await api.post('/api/scheduled-payments', {
+            name: addName.value,
+            amount: toNumber(addAmount.value),
+            frequency: addFrequency.value,
+            due_month: addMonth.value ? Number(addMonth.value) : null,
+            due_day: addDay.value ? Number(addDay.value) : null,
+            interval_years: addFrequency.value === 'every_3_years' ? 3 : addFrequency.value === 'every_5_years' ? 5 : null,
+            recurrence_start_year: new Date().getFullYear(),
+            paid_by: 'shared',
+            burden_owner: 'shared',
+            split: 1,
+            category: addCategory.value,
+            active: true,
+            note: addNote.value || L('資産/負債タブから追加', 'Added from Assets/Liabilities tab'),
+          });
+          await onSaved();
+        }, false),
+      ]),
+    ]));
+  }
+  refresh().catch((e) => {
+    clear(body);
+    body.appendChild(el('div', { class: 'banner banner-error' }, [`${L('将来コストを読み込めませんでした', 'Could not load future costs')}: ${e.message}`]));
+  });
+  return card;
+}
+
 function renderEventForm(onSaved: () => Promise<void>): HTMLElement {
   const card = el('details', { class: 'card' }, [el('summary', {}, [L('一括返済・貸付増加・修繕支出を追加', 'Add repayment/drawdown/repair event')])]);
   const target = select([
@@ -396,6 +529,7 @@ export async function renderAssets(root: HTMLElement, month = thisMonth()) {
     root.appendChild(toolbar);
     root.appendChild(renderSummary(res.rows, month));
     root.appendChild(renderSettings(res.settings, load));
+    root.appendChild(renderFutureCostEditor(load));
     root.appendChild(renderMortgageImport(load));
     root.appendChild(renderInvestments(load));
     if ((res as any).scheduled_deductions?.length) root.appendChild(el('div', { class: 'card' }, [el('h3', {}, [L('修繕積立金から支払う定期支出', 'Scheduled deductions from repair reserve')]), renderScheduledDeductions((res as any).scheduled_deductions)]));

@@ -6,6 +6,13 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 type Owner = 'toshi' | 'lisa' | 'shared' | 'other';
 type CashEvent = { date: string; owner: Owner; amount: number; kind: 'income' | 'payment'; label: string; source: string };
+type AppSettings = Record<string, string>;
+
+const dashboardSettingDefaults: AppSettings = {
+  budget_cycle_start_day: '25',
+  dashboard_actuals_override_plans: 'true',
+  dashboard_card_fixed_split_explained: 'true',
+};
 
 function addMonths(month: string, delta: number): string {
   const [y, m] = month.split('-').map(Number);
@@ -38,6 +45,31 @@ function ownerValue(v: any): Owner {
     'その他': 'other', '対象外': 'other', 'other': 'other', 'others': 'other', 'exclude': 'other', 'excluded': 'other',
   };
   return map[raw] || map[s] || 'other';
+}
+
+async function getAppSettings(db: D1Database, defaults: AppSettings = dashboardSettingDefaults): Promise<AppSettings> {
+  const settings = { ...defaults };
+  const keys = Object.keys(defaults);
+  if (!keys.length) return settings;
+  const rows = await selectAll<{ key: string; value: string }>(
+    db,
+    `SELECT key, value FROM app_settings WHERE key IN (${keys.map(() => '?').join(',')})`,
+    keys
+  );
+  for (const r of rows) settings[r.key] = r.value;
+  return settings;
+}
+
+async function putAppSettings(db: D1Database, items: Record<string, string | number | boolean>) {
+  const allowed = new Set(Object.keys(dashboardSettingDefaults));
+  for (const [key, value] of Object.entries(items)) {
+    if (!allowed.has(key)) continue;
+    await db.prepare(
+      `INSERT INTO app_settings (key, value, note, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+    ).bind(key, String(value), 'Editable app behavior setting').run();
+  }
 }
 
 function inferActualPayer(row: any): Owner {
@@ -190,7 +222,9 @@ function makeForecast(owner: Owner, events: CashEvent[], opening: number) {
 
 app.get('/dashboard/:month', async (c) => {
   const month = c.req.param('month');
-  const cycleStartDay = Number(c.req.query('cycle_start_day') || 25);
+  const appSettings = await getAppSettings(c.env.DB);
+  const configuredCycleStart = Number(appSettings.budget_cycle_start_day || 25);
+  const cycleStartDay = Number(c.req.query('cycle_start_day') || configuredCycleStart || 25);
   const period = cycleRange(month, cycleStartDay);
 
   const income = await selectOne<{ total: number; toshi: number; lisa: number }>(c.env.DB, `SELECT
@@ -206,11 +240,14 @@ app.get('/dashboard/:month', async (c) => {
      ORDER BY COALESCE(e.payment_due_date, e.date) ASC, e.id ASC`, [month]);
   const schedRaw = await scheduledOccurrences(c.env.DB, period, month);
   const fixedPlansRaw = await fixedOccurrences(c.env.DB, month);
-  const dedupedPlans = dedupePlannedAgainstActuals(rows, schedRaw, fixedPlansRaw);
+  const dedupedPlans = appSettings.dashboard_actuals_override_plans === 'false'
+    ? { scheduled: schedRaw, fixed: fixedPlansRaw, suppressed: [] as any[] }
+    : dedupePlannedAgainstActuals(rows, schedRaw, fixedPlansRaw);
   const sched = dedupedPlans.scheduled;
   const fixedPlans = dedupedPlans.fixed;
 
   let householdTotal = 0, splitTotal = 0, wifePersonal = 0, husbandOwn = 0, wifeDueGross = 0, husbandDueGross = 0, husbandPaid = 0, wifePaid = 0;
+  let actualExpenseTotal = 0, cardExpenseTotal = 0, nonCardActualExpenseTotal = 0;
   const wifeTransferLines: any[] = [];
   const addWifeLine = (source: string, item: any, amount: number, reason: string, shareRate: number) => { if (amount > 0) wifeTransferLines.push({ source, id: item.id || item.source_id || null, date: item.payment_due_date || item.due || item.date || null, description: item.description || item.name || '', category: item.category || '', original_amount: Number(item.amount || amount || 0), wife_due_amount: Math.round(amount), reason, share_rate: shareRate }); };
   const addHusbandCreditLine = (source: string, item: any, amount: number, reason: string, shareRate: number) => { if (amount > 0) wifeTransferLines.push({ source, id: item.id || item.source_id || null, date: item.payment_due_date || item.due || item.date || null, description: item.description || item.name || '', category: item.category || '', original_amount: Number(item.amount || amount || 0), wife_due_amount: -Math.round(amount), reason, share_rate: shareRate }); };
@@ -219,6 +256,9 @@ app.get('/dashboard/:month', async (c) => {
     const burden = inferBurdenOwner(r);
     const paidBy = inferActualPayer(r);
     if (burden === 'other') { continue; }
+    actualExpenseTotal += amount;
+    if (r.card_id) cardExpenseTotal += amount;
+    else nonCardActualExpenseTotal += amount;
     householdTotal += amount;
     if (burden === 'shared') splitTotal += amount;
     if (burden === 'lisa') wifePersonal += amount;
@@ -254,6 +294,7 @@ app.get('/dashboard/:month', async (c) => {
     }
   }
   let fixedTotal = 0;
+  const scheduledTotal = sched.reduce((a, x) => a + Number(x.amount || 0), 0);
   for (const fp of fixedPlans) {
     const amount = Number(fp.amount || 0);
     const burden = ownerValue(fp.burden_owner || fp.owner);
@@ -315,9 +356,28 @@ app.get('/dashboard/:month', async (c) => {
 
   return c.json({
     month,
-    period: { ...period, cycle_start_day: cycleStartDay, basis: 'salary_cycle_25_to_24' },
+    period: { ...period, cycle_start_day: cycleStartDay, basis: `salary_cycle_${cycleStartDay}_to_${cycleStartDay - 1 || 31}` },
     income,
-    household: { total: householdTotal, split_total: splitTotal, split_each: half(splitTotal), wife_personal_advanced: wifePersonal, husband_only: husbandOwn, fixed_total: fixedTotal, scheduled_total: sched.reduce((a, x) => a + Number(x.amount || 0), 0) },
+    settings: appSettings,
+    aggregation_policy: {
+      actuals_override_plans: appSettings.dashboard_actuals_override_plans === 'true',
+      card_fixed_split_explained: appSettings.dashboard_card_fixed_split_explained === 'true',
+      note: 'Household total = actual expenses for the budget month + remaining fixed/scheduled plans not matched to actual expenses.',
+    },
+    household: {
+      total: householdTotal,
+      split_total: splitTotal,
+      split_each: half(splitTotal),
+      wife_personal_advanced: wifePersonal,
+      husband_only: husbandOwn,
+      fixed_total: fixedTotal,
+      scheduled_total: scheduledTotal,
+      actual_expense_total: actualExpenseTotal,
+      card_expense_total: cardExpenseTotal,
+      non_card_actual_expense_total: nonCardActualExpenseTotal,
+      planned_total: fixedTotal + scheduledTotal,
+      suppressed_planned_total: dedupedPlans.suppressed.reduce((a, x) => a + Number(x.amount || 0), 0),
+    },
     settlement: { wife_due_to_husband: wifeTransferDue, husband_due_to_wife: husbandToWifeDue, net_wife_to_husband: netWifeToHusband, wife_final_burden: wifeFinalBurden, husband_final_burden: husbandFinalBurden, husband_split_share: splitTotal - half(splitTotal), wife_split_share: half(splitTotal), husband_salary_balance: Number(income.toshi || 0) - husbandFinalBurden, wife_salary_balance: Number(income.lisa || 0) - wifeTransferDue, direction: netWifeToHusband > 0 ? 'lisa_to_toshi' : netWifeToHusband < 0 ? 'toshi_to_lisa' : 'none', wife_transfer_lines: wifeTransferLines, wife_transfer_breakdown: wifeTransferBreakdown, wife_transfer_positive_total: wifeTransferLines.filter(x => x.wife_due_amount > 0).reduce((a,x) => a + Number(x.wife_due_amount || 0), 0), wife_transfer_credit_total: Math.abs(wifeTransferLines.filter(x => x.wife_due_amount < 0).reduce((a,x) => a + Number(x.wife_due_amount || 0), 0)) },
     cashflow: { forecasts, account_balances: balances, scheduled_payments: sched, fixed_plans: fixedPlans, suppressed_planned: dedupedPlans.suppressed, duplicate_policy: 'actual expenses override fixed/scheduled plans in the same month' },
     assets: { investments: { total: Math.round(Number(investmentSummary.total || 0)), cost: Math.round(Number(investmentSummary.cost || 0)), unrealized_pl: Math.round(Number(investmentSummary.total || 0) - Number(investmentSummary.cost || 0)), count: Number(investmentSummary.count || 0) }, repair_seed: Number(assetSummary.repair_seed || 0), total_net_assets_hint: Math.round(Number(investmentSummary.total || 0) + Number(openingByOwner.shared || 0)) },
@@ -345,6 +405,18 @@ app.get('/timeline', async (c) => {
      WHERE archived_at IS NULL AND COALESCE(cycle_month, billing_month) >= ? AND COALESCE(cycle_month, billing_month) <= ?
      GROUP BY COALESCE(cycle_month, billing_month) ORDER BY month ASC`, [fromMonth, toMonth]);
   return c.json({ items: rows });
+});
+
+app.get('/settings', async (c) => {
+  c.header('Cache-Control', 'no-store, max-age=0');
+  return c.json({ items: await getAppSettings(c.env.DB), defaults: dashboardSettingDefaults });
+});
+
+app.put('/settings', async (c) => {
+  const body = await c.req.json<{ items?: Record<string, string | number | boolean> }>();
+  await putAppSettings(c.env.DB, body.items || {});
+  c.header('Cache-Control', 'no-store, max-age=0');
+  return c.json({ ok: true, items: await getAppSettings(c.env.DB), defaults: dashboardSettingDefaults });
 });
 
 export default app;

@@ -921,6 +921,36 @@ button.btn-small {
 .chart-legend { display:flex; flex-wrap:wrap; gap:10px 14px; padding: 6px 4px 2px; font-size: 12px; color: var(--text-muted); }
 .chart-legend span { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
 .chart-legend i { width: 12px; height: 12px; border-radius: 999px; display:inline-block; }
+.aggregation-row span,
+.future-cost-row {
+  min-width: 0;
+}
+.aggregation-row small {
+  display: block;
+  margin-top: 2px;
+}
+.future-cost-list {
+  display: grid;
+  gap: 10px;
+}
+.future-cost-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-highlight);
+}
+.checkbox-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.checkbox-field input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+}
 @media (max-width: 560px) {
   .editable-row input,
   .editable-row select { min-width: 96px; }
@@ -1100,5 +1130,9 @@ button.ghost.danger {
   .editable-row select,
   .compact-input {
     min-width: 120px;
+  }
+
+  .future-cost-row {
+    grid-template-columns: 1fr;
   }
 }
