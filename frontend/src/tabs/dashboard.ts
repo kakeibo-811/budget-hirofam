@@ -138,12 +138,21 @@ export function renderDashboard(root: HTMLElement) {
       content.appendChild(policy);
 
       if ((data.evidence ?? []).length > 0) {
-        const evidence = el('div', { class: 'card' }, [el('h3', {}, [L('根拠明細', 'Evidence rows')])]);
+        const evidenceRows = data.evidence.slice(0, 80);
+        const evidenceTotal = data.evidence.reduce((a, row) => a + Number(row.amount || 0), 0);
+        const visibleTotal = evidenceRows.reduce((a, row) => a + Number(row.amount || 0), 0);
+        const evidence = el('div', { class: 'card', id: 'dashboard-evidence-rows' }, [el('h3', {}, [L('根拠明細', 'Evidence rows')])]);
+        evidence.appendChild(el('div', { class: 'dashboard-evidence-summary' }, [
+          el('span', {}, [L(`明細 ${data.evidence.length} 件 / 合計 ${yenNoSymbol(evidenceTotal)}`, `${data.evidence.length} rows / total ${yenNoSymbol(evidenceTotal)}`)]),
+          data.evidence.length > evidenceRows.length
+            ? el('small', { class: 'muted' }, [L(`先頭 ${evidenceRows.length} 件を表示中。表示分合計 ${yenNoSymbol(visibleTotal)}`, `Showing first ${evidenceRows.length}. Visible total ${yenNoSymbol(visibleTotal)}`)])
+            : el('small', { class: 'muted' }, [L('表示中の明細合計です', 'Total of the visible rows')]),
+        ]));
         const wrap = el('div', { class: 'table-wrap' });
         const table = el('table', { class: 'data compact-table' });
         table.innerHTML = `<thead><tr><th>${t('common.date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th><th>${t('common.payer')}</th><th>${t('common.category')}</th><th>${t('common.card')}</th></tr></thead>`;
         const tbody = el('tbody');
-        for (const row of data.evidence.slice(0, 80)) {
+        for (const row of evidenceRows) {
           tbody.appendChild(el('tr', {}, [
             el('td', { class: 'mono' }, [row.date]),
             el('td', { class: 'num' }, [formatYen(row.amount)]),
@@ -154,6 +163,13 @@ export function renderDashboard(root: HTMLElement) {
           ]));
         }
         table.appendChild(tbody);
+        table.appendChild(el('tfoot', {}, [
+          el('tr', {}, [
+            el('th', {}, [L('合計', 'Total')]),
+            el('th', { class: 'num' }, [formatYen(visibleTotal)]),
+            el('th', { colspan: '4' }, [data.evidence.length > evidenceRows.length ? L('表示分のみ', 'Visible rows only') : L('全明細', 'All rows')]),
+          ]),
+        ]));
         wrap.appendChild(table);
         evidence.appendChild(wrap);
         content.appendChild(evidence);
@@ -176,17 +192,20 @@ function aggregationExplanation(data: DashboardData): HTMLElement {
     '家計合計は「明細に入った実績」と「まだ明細化されていない固定費/予定支払い」を足しています。カード支払いと固定費が混ざって見えないよう、ここで分けて確認できます。',
     'Household total combines actual expense rows with fixed/scheduled plans that have not yet become actual rows.'
   )]));
-  const rows: [string, number, string][] = [
-    [L('カード支払いなどの実績明細', 'Actual card payments'), Number(data.household.card_expense_total || 0), L('明細タブに入っているカード払い。支払日/家計月で集計します。', 'Card expenses already entered in Expenses.')],
-    [L('カード以外の実績明細', 'Actual non-card payments'), Number(data.household.non_card_actual_expense_total || 0), L('現金・振込・手入力など、カード以外で明細化済みの支出です。', 'Manual/cash/transfer expenses already entered.')],
-    [L('固定費の予定分', 'Fixed-cost plans'), Number(data.household.fixed_total || 0), L('固定費タブの月次予定。実績明細と一致するものは二重計上しません。', 'Monthly fixed plans. Matching actual rows are not double-counted.')],
-    [L('その他予定支払い', 'Other scheduled plans'), Number(data.household.scheduled_total || 0), L('保険・税金・PayPalなど、固定費以外の予定支払いです。', 'Insurance, tax, PayPal, and other scheduled payments.')],
+  const rows: [string, number, string, string][] = [
+    [L('カード支払いなどの実績明細', 'Actual card payments'), Number(data.household.card_expense_total || 0), L('明細タブに入っているカード払い。支払日/家計月で集計します。', 'Card expenses already entered in Expenses.'), 'dashboard-evidence-rows'],
+    [L('カード以外の実績明細', 'Actual non-card payments'), Number(data.household.non_card_actual_expense_total || 0), L('現金・振込・手入力など、カード以外で明細化済みの支出です。', 'Manual/cash/transfer expenses already entered.'), 'dashboard-evidence-rows'],
+    [L('固定費の予定分', 'Fixed-cost plans'), Number(data.household.fixed_total || 0), L('固定費タブの月次予定。実績明細と一致するものは二重計上しません。', 'Monthly fixed plans. Matching actual rows are not double-counted.'), 'dashboard-fixed-plan-rows'],
+    [L('その他予定支払い', 'Other scheduled plans'), Number(data.household.scheduled_total || 0), L('保険・税金・PayPalなど、固定費以外の予定支払いです。', 'Insurance, tax, PayPal, and other scheduled payments.'), 'dashboard-scheduled-plan-rows'],
   ];
   const list = el('div', { class: 'settlement-list' });
-  for (const [label, amount, note] of rows) {
+  for (const [label, amount, note, targetId] of rows) {
     list.appendChild(el('div', { class: 'settlement-row aggregation-row' }, [
       el('span', {}, [label, el('small', { class: 'muted' }, [note])]),
-      el('strong', {}, [yenNoSymbol(amount)]),
+      el('div', { class: 'aggregation-row-actions' }, [
+        el('button', { class: 'ghost btn-small', onClick: () => scrollToDashboardSection(targetId) }, [L('根拠を見る', 'View rows')]),
+        el('strong', {}, [yenNoSymbol(amount)]),
+      ]),
     ]));
   }
   list.appendChild(el('div', { class: 'settlement-row settlement-total' }, [
@@ -201,7 +220,65 @@ function aggregationExplanation(data: DashboardData): HTMLElement {
     )]));
   }
   card.appendChild(list);
+  card.appendChild(plannedRowsDetails(data));
   return card;
+}
+
+function scrollToDashboardSection(id: string) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  if (target instanceof HTMLDetailsElement) target.open = true;
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function plannedRowsDetails(data: DashboardData): HTMLElement {
+  const box = el('div', { class: 'dashboard-plan-details' });
+  box.appendChild(planRowsTable(
+    'dashboard-fixed-plan-rows',
+    L('固定費予定の根拠', 'Fixed-cost plan rows'),
+    data.cashflow?.fixed_plans || [],
+  ));
+  box.appendChild(planRowsTable(
+    'dashboard-scheduled-plan-rows',
+    L('その他予定支払いの根拠', 'Other scheduled plan rows'),
+    data.cashflow?.scheduled_payments || [],
+  ));
+  return box;
+}
+
+function planRowsTable(id: string, title: string, rows: any[]): HTMLElement {
+  const total = rows.reduce((a, row) => a + Number(row.amount || 0), 0);
+  const details = el('details', { class: 'collapse', id }, [
+    el('summary', {}, [`${title} / ${rows.length}${L('件', ' rows')} / ${yenNoSymbol(total)}`]),
+  ]);
+  if (!rows.length) {
+    details.appendChild(el('div', { class: 'muted' }, [L('対象明細はありません', 'No rows')]));
+    return details;
+  }
+  const wrap = el('div', { class: 'table-wrap' });
+  const table = el('table', { class: 'data compact-table' });
+  table.innerHTML = `<thead><tr><th>${t('common.payment_date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th><th>${t('common.payer')}</th><th>${L('負担', 'Burden')}</th></tr></thead>`;
+  const tbody = el('tbody');
+  for (const row of rows) {
+    tbody.appendChild(el('tr', {}, [
+      el('td', { class: 'mono' }, [row.due || row.due_date || row.payment_due_date || '']),
+      el('td', { class: 'num' }, [formatYen(row.amount)]),
+      el('td', {}, [row.name || row.description || '']),
+      el('td', {}, [t(`payer.${row.paid_by || 'toshi'}` as any)]),
+      el('td', {}, [t(`owner.${row.burden_owner || row.owner || 'shared'}` as any)]),
+    ]));
+  }
+  table.appendChild(tbody);
+  table.appendChild(el('tfoot', {}, [
+    el('tr', {}, [
+      el('th', {}, [L('合計', 'Total')]),
+      el('th', { class: 'num' }, [formatYen(total)]),
+      el('th', { colspan: '3' }, [L('この予定明細の合計', 'Total of these planned rows')]),
+    ]),
+  ]));
+  wrap.appendChild(table);
+  details.appendChild(wrap);
+  return details;
 }
 
 

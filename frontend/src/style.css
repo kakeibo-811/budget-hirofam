@@ -697,6 +697,26 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.aggregation-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dashboard-evidence-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 12px;
+  font-weight: 700;
+}
+.dashboard-plan-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
 .settlement-total { font-weight: 700; }
 .settlement-transfer {
   background: color-mix(in srgb, var(--accent-soft) 75%, var(--bg-card));
