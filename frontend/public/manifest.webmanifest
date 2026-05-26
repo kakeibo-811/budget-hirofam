@@ -1,0 +1,10 @@
+{
+  "name": "Budget HiroFam",
+  "short_name": "HiroFam",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff5f7",
+  "theme_color": "#fce4ec",
+  "description": "Household budget app for Toshi and Lisa"
+}
