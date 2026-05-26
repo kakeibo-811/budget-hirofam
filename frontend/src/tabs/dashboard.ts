@@ -76,6 +76,7 @@ export function renderDashboard(root: HTMLElement) {
         credit_husband_paid_by_wife: 0,
       };
 
+      content.appendChild(mobileDashboard(data, wb));
       content.appendChild(summaryHero(data));
       content.appendChild(formulaSection(data, wb));
       content.appendChild(primaryGrids(data, wb));
@@ -93,6 +94,62 @@ export function renderDashboard(root: HTMLElement) {
 
   picker.onChange(load);
   load(picker.get());
+}
+
+function mobileDashboard(data: DashboardData, wb: DashboardData['settlement']['wife_transfer_breakdown']): HTMLElement {
+  return el('section', { class: 'mobile-dashboard' }, [
+    el('div', { class: 'mobile-decision-card' }, [
+      el('div', { class: 'mobile-kicker' }, [L(`${data.month} 概要`, `Dashboard ${data.month}`)]),
+      el('div', { class: 'mobile-label' }, [L('妻から夫へ振込む額', 'Wife pays Husband')]),
+      el('div', { class: 'mobile-transfer-amount' }, [yen(data.settlement.wife_due_to_husband)]),
+      el('div', { class: 'mobile-period' }, [`${data.period.start} - ${data.period.end}`]),
+      el('div', { class: 'mobile-action-grid' }, [
+        el('button', { class: 'primary', onClick: () => scrollToDashboardSection('wife-transfer-breakdown-mobile') }, [L('内訳', 'Breakdown')]),
+        el('button', { class: 'ghost', onClick: () => scrollToDashboardSection('household-summary-mobile') }, [L('家計', 'Household')]),
+      ]),
+    ]),
+    mobileRowsCard('wife-transfer-breakdown-mobile', L('振込内訳', 'Transfer breakdown'), [
+      [L('妻個人分', 'Wife personal'), wb?.wife_personal_paid_by_husband || 0],
+      [L('折半分', 'Split share'), wb?.split_paid_by_husband || 0],
+      [L('固定費/予定支払い', 'Fixed/scheduled'), wb?.fixed_or_scheduled_paid_by_husband || 0],
+      [L('控除', 'Credit'), -(wb?.credit_husband_paid_by_wife || 0)],
+      [L('振込予定', 'Transfer due'), data.settlement.wife_due_to_husband],
+    ]),
+    mobileRowsCard('household-summary-mobile', L('家計サマリー', 'Household summary'), [
+      [L('家計合計', 'Household total'), data.household.total],
+      [L('カード実績', 'Card actuals'), data.household.card_expense_total || 0],
+      [L('カード以外の実績', 'Non-card actuals'), data.household.non_card_actual_expense_total || 0],
+      [L('固定費予定', 'Fixed plans'), data.household.fixed_total || 0],
+      [L('その他予定支払い', 'Other plans'), data.household.scheduled_total || 0],
+    ]),
+    mobileRowsCard('husband-burden-mobile', L('夫の最終負担', 'Husband burden'), [
+      [L('夫個人負担', 'Husband-only'), data.household.husband_only],
+      [L('折半の夫負担', 'Husband split'), data.settlement.husband_split_share],
+      [L('夫最終負担', 'Husband final'), data.settlement.husband_final_burden],
+      [L('夫収入との差', 'Income minus burden'), data.settlement.husband_salary_balance],
+    ]),
+    mobileRowsCard('cash-check-mobile', L('口座チェック', 'Cash check'), [
+      [L('夫 収入', 'Husband income'), data.income.toshi],
+      [L('夫 必要額', 'Husband required'), data.settlement.husband_final_burden],
+      [L('妻 収入', 'Wife income'), data.income.lisa],
+      [L('妻 振込予定', 'Wife transfer'), data.settlement.wife_due_to_husband],
+    ]),
+  ]);
+}
+
+function mobileRowsCard(id: string, title: string, rows: AmountRow[]): HTMLElement {
+  const details = el('details', { class: 'mobile-summary-card', id }, [
+    el('summary', {}, [title]),
+  ]);
+  const list = el('div', { class: 'mobile-row-list' });
+  rows.forEach(([label, amount], index) => {
+    list.appendChild(el('div', { class: `mobile-row ${index === rows.length - 1 ? 'mobile-row-total' : ''}` }, [
+      el('span', {}, [label]),
+      el('strong', {}, [amount < 0 ? `-${yen(Math.abs(amount))}` : yen(amount)]),
+    ]));
+  });
+  details.appendChild(list);
+  return details;
 }
 
 function summaryHero(data: DashboardData): HTMLElement {

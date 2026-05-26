@@ -616,6 +616,9 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
   display: grid;
   gap: 14px;
 }
+.mobile-dashboard {
+  display: none;
+}
 .dashboard-hero {
   border: 1px solid var(--border);
   border-radius: 22px;
@@ -1432,6 +1435,129 @@ button.ghost.danger {
     width: 100%;
     max-width: 100%;
     overflow-x: clip;
+  }
+
+  .dashboard-page > :not(.mobile-dashboard) {
+    display: none !important;
+  }
+
+  .mobile-dashboard {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .mobile-decision-card,
+  .mobile-summary-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .mobile-decision-card {
+    display: grid;
+    gap: 5px;
+    padding: 12px;
+    background: color-mix(in srgb, var(--accent-soft) 70%, var(--bg-card));
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  }
+
+  .mobile-kicker,
+  .mobile-label,
+  .mobile-period {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .mobile-transfer-amount {
+    font-family: var(--font-num);
+    font-size: clamp(32px, 13vw, 46px);
+    font-weight: 900;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .mobile-action-grid button {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px;
+  }
+
+  .mobile-summary-card {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .mobile-summary-card summary {
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+    padding: 10px 12px;
+    font-weight: 800;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .mobile-summary-card summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-summary-card summary::after {
+    content: "+";
+    margin-left: auto;
+    color: var(--text-muted);
+    font-weight: 900;
+  }
+
+  .mobile-summary-card[open] summary::after {
+    content: "-";
+  }
+
+  .mobile-row-list {
+    display: grid;
+    gap: 1px;
+    padding: 0 8px 8px;
+  }
+
+  .mobile-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border-radius: 10px;
+    background: var(--bg-highlight);
+  }
+
+  .mobile-row span {
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .mobile-row strong {
+    font-family: var(--font-num);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .mobile-row-total {
+    border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+    background: color-mix(in srgb, var(--accent-soft) 66%, var(--bg-card));
+    font-weight: 800;
   }
 
   .dashboard-page,
