@@ -1429,6 +1429,22 @@ button.ghost.danger {
 
   .dashboard-page {
     gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .dashboard-page,
+  .dashboard-page * {
+    min-width: 0;
+  }
+
+  .dashboard-page .dashboard-card,
+  .dashboard-page .dashboard-hero,
+  .dashboard-page .collapse,
+  .dashboard-page .table-wrap {
+    width: 100%;
+    max-width: 100%;
   }
 
   .redesigned-dashboard-hero {
@@ -1495,10 +1511,11 @@ button.ghost.danger {
     gap: 4px;
     border-radius: 14px;
     box-shadow: none;
+    width: 100%;
   }
 
   .formula-term {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: 6px;
     padding: 7px 8px;
@@ -1511,7 +1528,8 @@ button.ghost.danger {
 
   .formula-term strong {
     font-size: 13px;
-    text-align: right;
+    text-align: left;
+    justify-self: start;
   }
 
   .formula-operator {
@@ -1541,16 +1559,18 @@ button.ghost.danger {
 
   .amount-row,
   .settlement-row {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     padding: 7px 8px;
-    gap: 8px;
+    gap: 3px;
   }
 
   .amount-row strong,
   .settlement-row strong {
-    margin-left: auto;
-    text-align: right;
+    margin-left: 0;
+    justify-self: start;
+    text-align: left;
     white-space: normal;
     overflow-wrap: anywhere;
     font-size: 13px;
@@ -1568,13 +1588,14 @@ button.ghost.danger {
 
   .aggregation-row-actions {
     width: 100%;
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
   .aggregation-row-actions strong {
     margin-left: 0;
+    justify-self: start;
   }
 
   .aggregation-row-actions button {
@@ -1658,22 +1679,38 @@ button.ghost.danger {
   }
 
   .table-wrap {
-    margin-left: -6px;
-    margin-right: -6px;
-    border-left: none;
-    border-right: none;
-    border-radius: 0;
+    margin-left: 0;
+    margin-right: 0;
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     max-height: 52vh;
+    overflow-x: auto;
   }
 
-  table.data {
-    min-width: 520px;
+  .dashboard-page table.data {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
     font-size: 11px;
   }
 
-  table.data th,
-  table.data td {
-    padding: 6px;
+  .dashboard-page table.data th,
+  .dashboard-page table.data td {
+    padding: 5px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .dashboard-page table.data th:nth-child(n+4),
+  .dashboard-page table.data td:nth-child(n+4) {
+    display: none;
+  }
+
+  .dashboard-page table.data th.num,
+  .dashboard-page table.data td.num {
+    width: 34%;
   }
 
   .table-actions,
