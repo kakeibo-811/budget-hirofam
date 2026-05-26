@@ -1,0 +1,146 @@
+﻿import { Hono } from 'hono';
+import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
+import { cors } from 'hono/cors';
+import { secureHeaders } from 'hono/secure-headers';
+import { cfAccessAuth } from './middleware/cf-access';
+import { writeGuard } from './middleware/write-guard';
+import { errorHandler } from './middleware/error-handler';
+import expensesRoute from './routes/expenses';
+import cardsRoute from './routes/cards';
+import accountsRoute from './routes/accounts';
+import incomesRoute from './routes/incomes';
+import fixedCostsRoute from './routes/fixed-costs';
+import settlementsRoute from './routes/settlements';
+import assetsRoute from './routes/assets';
+import analyticsRoute from './routes/analytics';
+import messagesRoute from './routes/messages';
+import diagRoute from './routes/diag';
+import importExportRoute from './routes/import-export';
+
+export type Env = {
+  DB: D1Database;
+  APP_ENV: string;
+  APP_VERSION: string;
+  APP_BUILD: string;
+  WRITE_ENABLED: string;
+  CF_ACCESS_TEAM_DOMAIN: string;
+  CF_ACCESS_AUD: string;
+};
+
+export type Variables = {
+  user: { email: string; sub: string } | null;
+};
+
+const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+// ============================================================
+// Global middleware
+// ============================================================
+app.use('*', secureHeaders({
+  contentSecurityPolicy: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "'unsafe-inline'"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", 'data:'],
+    fontSrc: ["'self'", 'data:'],
+    connectSrc: ["'self'"],
+  },
+}));
+app.use('/api/*', cors({
+  origin: (origin) => origin,
+  credentials: true,
+}));
+app.onError(errorHandler);
+
+// ============================================================
+// Health & meta・郁ｪ崎ｨｼ荳崎ｦ・ｼ・// ============================================================
+app.get('/api/health', async (c) => {
+  // DB binding 逍朱夂｢ｺ隱阪ｂ蜈ｼ縺ｭ繧具ｼ磯℃蜴ｻ縺ｮbinding谺關ｽ莠区腐蟇ｾ遲厄ｼ・  let dbOk = false;
+  let dbError: string | null = null;
+  try {
+    const r = await c.env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
+    dbOk = r?.ok === 1;
+  } catch (e: any) {
+    dbError = e?.message ?? String(e);
+  }
+  return c.json({
+    status: dbOk ? 'ok' : 'degraded',
+    env: c.env.APP_ENV,
+    version: c.env.APP_VERSION,
+    build: c.env.APP_BUILD,
+    write_enabled: c.env.WRITE_ENABLED === 'true',
+    db: { ok: dbOk, error: dbError },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/meta', async (c) => {
+  return c.json({
+    version: c.env.APP_VERSION,
+    build: c.env.APP_BUILD,
+    env: c.env.APP_ENV,
+    write_enabled: c.env.WRITE_ENABLED === 'true',
+  });
+});
+
+// ============================================================
+// Cloudflare Access verification for /api/*
+// ============================================================
+app.use('/api/*', cfAccessAuth);
+
+// 譖ｸ縺崎ｾｼ縺ｿ繧ｨ繝ｳ繝峨・繧､繝ｳ繝医・ WRITE_ENABLED 繝輔Λ繧ｰ縺ｧ繧ｬ繝ｼ繝・app.use('/api/*', writeGuard);
+
+// ============================================================
+// API routes
+// ============================================================
+app.route('/api/expenses', expensesRoute);
+app.route('/api/cards', cardsRoute);
+app.route('/api/accounts', accountsRoute);
+app.route('/api/incomes', incomesRoute);
+app.route('/api/fixed-costs', fixedCostsRoute);
+app.route('/api/settlements', settlementsRoute);
+app.route('/api/assets', assetsRoute);
+app.route('/api/analytics', analyticsRoute);
+app.route('/api/messages', messagesRoute);
+app.route('/api/diag', diagRoute);
+app.route('/api/io', importExportRoute);
+
+// ============================================================
+// Static asset serving (SPA fallback)
+// ============================================================
+app.get('*', async (c) => {
+  // Workers Sites static asset serving.
+  // For SPA routes, fallback to index.html.
+  try {
+    return await getAssetFromKV(
+      {
+        request: c.req.raw,
+        waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx),
+      },
+      {
+        ASSET_NAMESPACE: c.env.__STATIC_CONTENT,
+        ASSET_MANIFEST: c.env.__STATIC_CONTENT_MANIFEST,
+        mapRequestToAsset: (request) => {
+          const url = new URL(request.url);
+          const pathname = url.pathname;
+
+          if (
+            pathname.startsWith('/assets/') ||
+            pathname === '/favicon.ico' ||
+            pathname.includes('.')
+          ) {
+            return request;
+          }
+
+          url.pathname = '/index.html';
+          return new Request(url.toString(), request);
+        },
+      }
+    );
+  } catch (e) {
+    return c.text('Static asset serving failed: ' + String(e), 503);
+  }
+});
+
+export default app;
+

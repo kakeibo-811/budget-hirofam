@@ -1,0 +1,49 @@
+﻿name = "budget-hirofam"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+[site]
+bucket = "../frontend/dist"
+
+[vars]
+APP_ENV = "local"
+APP_VERSION = "v1.0.0"
+APP_BUILD = "2026-05-09"
+WRITE_ENABLED = "false"
+CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+[env.preview]
+name = "budget-hirofam-preview"
+
+[env.preview.vars]
+APP_ENV = "preview"
+APP_VERSION = "v1.0.0-preview"
+APP_BUILD = "2026-05-09"
+WRITE_ENABLED = "false"
+CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "budget-hirofam-preview"
+database_id = "09b9cdde-41e7-4120-abfe-fe044fce5392"
+migrations_dir = "../migrations"
+
+[env.production]
+name = "budget-hirofam-prod"
+
+[env.production.vars]
+APP_ENV = "production"
+APP_VERSION = "v1.0.0"
+APP_BUILD = "2026-05-09"
+WRITE_ENABLED = "false"
+CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "kakeibo-production"
+database_id = "abd40448-86d6-4a30-8290-28dcdcfb154d"
+migrations_dir = "../migrations"

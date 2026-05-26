@@ -1,0 +1,58 @@
+﻿#:schema node_modules/wrangler/config-schema.json
+# Budget HiroFam - Cloudflare Workers configuration
+# IMPORTANT: env.production 縺ｨ env.preview 繧貞ｿ・★譏守､ｺ謖・ｮ壹☆繧九％縺ｨ縲・# wrangler deploy・・nv縺ｪ縺暦ｼ峨・遖∵ｭ｢縲ゅせ繧ｯ繝ｪ繝励ヨ邨檎罰縺ｧ縺ｮ縺ｿ繝・・繝ｭ繧､縺吶ｋ縺薙→縲・
+name = "budget-hirofam"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+
+# Workers Sites static assets
+[site]
+bucket = "../frontend/dist"
+# Pages縺ｫ髱咏噪繝輔ぃ繧､繝ｫ繧剃ｹ励○繧区ｧ区・
+# 蜈ｱ騾夂腸蠅・､画焚・・nv縺斐→縺ｫ荳頑嶌縺榊庄・・[vars]
+APP_VERSION = "v1.0.0"
+APP_BUILD = "26/5/9迚・
+WRITE_ENABLED = "false"  # 竊・蛻晄悄縺ｯ隱ｭ縺ｿ蜿悶ｊ蟆ら畑縲よ嶌縺崎ｾｼ縺ｿ隗｣遖∵凾縺ｮ縺ｿ "true"
+
+# ============================================================
+# Preview environment・域､懆ｨｼ逕ｨ縲ゞRL驛ｽ蠎ｦ螟峨ｏ繧句燕謠撰ｼ・# ============================================================
+[env.preview]
+name = "budget-hirofam-preview"
+
+[env.preview.vars]
+APP_ENV = "preview"
+APP_VERSION = "v1.0.0-preview"
+APP_BUILD = "26/5/9迚・
+WRITE_ENABLED = "false"
+# Cloudflare Access 讀懆ｨｼ逕ｨ・・ccess邂｡逅・判髱｢縺ｧ蜿門ｾ励＠縺溷､繧貞ｾ後〒 wrangler secret 縺ｧ險ｭ螳夲ｼ・# CF_ACCESS_AUD 縺ｯ public 縺ｧ繧ょ撫鬘後↑縺・′縲・°逕ｨ荳・secret 縺ｫ蜈･繧後ｋ豬∝о縺ｧ繧ゅｈ縺・CF_ACCESS_TEAM_DOMAIN = ""  # 萓・ "hirofam.cloudflareaccess.com"
+CF_ACCESS_AUD = ""           # 萓・ "abc123def456..."
+
+[[env.preview.d1_databases]]
+binding = "ASSETS"
+database_name = "budget-hirofam-preview"
+database_id = "09b9cdde-41e7-4120-abfe-fe044fce5392"  # 竊・`wrangler d1 create budget-hirofam-preview` 蠕後↓雋ｼ繧・migrations_dir = "../migrations"
+
+# ============================================================
+# Production environment・域悽逡ｪ縲ゞRL蝗ｺ螳夲ｼ・# ============================================================
+[env.production]
+name = "budget-hirofam-prod"
+
+[env.production.vars]
+APP_ENV = "production"
+APP_VERSION = "v1.0.0"
+APP_BUILD = "26/5/9迚・
+WRITE_ENABLED = "false"  # 竊・蜍穂ｽ懃｢ｺ隱阪〒縺阪ｋ縺ｾ縺ｧ縺ｯ false 邯ｭ謖・CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+[[env.production.d1_databases]]
+binding = "ASSETS"
+database_name = "budget-hirofam-prod"
+database_id = "abd40448-86d6-4a30-8290-28dcdcfb154d"  # 竊・`wrangler d1 create budget-hirofam-prod` 蠕後↓雋ｼ繧・migrations_dir = "../migrations"
+
+# ============================================================
+# 豕ｨ諢擾ｼ壹ヨ繝・・繝ｬ繝吶Ν・・nv縺ｪ縺暦ｼ峨↓縺ｯ d1_databases 繧呈嶌縺九↑縺・・# 驕主悉縺ｫ env 譛ｪ謖・ｮ壹〒 deploy 縺励※蛻･迺ｰ蠅・・bind縺御ｽｿ繧上ｌ縺滉ｺ区腐繧帝亟縺舌◆繧√・# ============================================================
+
+
+

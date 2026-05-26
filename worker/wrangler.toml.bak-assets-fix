@@ -1,0 +1,70 @@
+#:schema node_modules/wrangler/config-schema.json
+# Budget HiroFam - Cloudflare Workers configuration
+# IMPORTANT: env.production と env.preview を必ず明示指定すること。
+# wrangler deploy（envなし）は禁止。スクリプト経由でのみデプロイすること。
+
+name = "budget-hirofam"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# Pagesに静的ファイルを乗せる構成
+[site]
+bucket = "../frontend/dist"
+
+# 共通環境変数（envごとに上書き可）
+[vars]
+APP_VERSION = "v1.0.0"
+APP_BUILD = "26/5/9版"
+WRITE_ENABLED = "false"  # ← 初期は読み取り専用。書き込み解禁時のみ "true"
+
+# ============================================================
+# Preview environment（検証用、URL都度変わる前提）
+# ============================================================
+[env.preview]
+name = "budget-hirofam-preview"
+
+[env.preview.vars]
+APP_ENV = "preview"
+APP_VERSION = "v1.0.0-preview"
+APP_BUILD = "26/5/9版"
+WRITE_ENABLED = "false"
+# Cloudflare Access 検証用（Access管理画面で取得した値を後で wrangler secret で設定）
+# CF_ACCESS_AUD は public でも問題ないが、運用上 secret に入れる流儀でもよい
+CF_ACCESS_TEAM_DOMAIN = ""  # 例: "hirofam.cloudflareaccess.com"
+CF_ACCESS_AUD = ""           # 例: "abc123def456..."
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "budget-hirofam-preview"
+database_id = "09b9cdde-41e7-4120-abfe-fe044fce5392"  # ← `wrangler d1 create budget-hirofam-preview` 後に貼る
+migrations_dir = "../migrations"
+
+# ============================================================
+# Production environment（本番、URL固定）
+# ============================================================
+[env.production]
+name = "budget-hirofam-prod"
+
+[env.production.vars]
+APP_ENV = "production"
+APP_VERSION = "v1.0.0"
+APP_BUILD = "26/5/9版"
+WRITE_ENABLED = "false"  # ← 動作確認できるまでは false 維持
+CF_ACCESS_TEAM_DOMAIN = ""
+CF_ACCESS_AUD = ""
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "budget-hirofam-prod"
+database_id = "abd40448-86d6-4a30-8290-28dcdcfb154d"  # ← `wrangler d1 create budget-hirofam-prod` 後に貼る
+migrations_dir = "../migrations"
+
+# ============================================================
+# 注意：トップレベル（envなし）には d1_databases を書かない。
+# 過去に env 未指定で deploy して別環境のbindが使われた事故を防ぐため。
+# ============================================================
+
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
