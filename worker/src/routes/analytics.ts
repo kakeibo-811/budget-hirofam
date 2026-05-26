@@ -231,7 +231,7 @@ app.get('/dashboard/:month', async (c) => {
        COALESCE(SUM(amount), 0) AS total,
        COALESCE(SUM(CASE WHEN owner = 'toshi' THEN amount ELSE 0 END), 0) AS toshi,
        COALESCE(SUM(CASE WHEN owner = 'lisa' THEN amount ELSE 0 END), 0) AS lisa
-     FROM incomes WHERE date >= ? AND date <= ?`, [period.start, period.end]) || { total: 0, toshi: 0, lisa: 0 };
+     FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]) || { total: 0, toshi: 0, lisa: 0 };
 
   const rows = await selectAll<any>(c.env.DB, `SELECT e.*, c.name AS card_name, c.owner AS card_owner, c.default_paid_by AS card_default_paid_by, c.default_burden_owner AS card_default_burden_owner
      FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
@@ -339,7 +339,7 @@ app.get('/dashboard/:month', async (c) => {
   const openingByOwner = { toshi: 0, lisa: 0, shared: 0, other: 0 } as Record<Owner, number>;
   for (const b of balances) openingByOwner[ownerValue(b.owner)] += Number(b.balance || 0);
   const cashEvents: CashEvent[] = [];
-  const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description FROM incomes WHERE date >= ? AND date <= ?`, [period.start, period.end]);
+  const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]);
   for (const x of incomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'income', source: 'income' });
   for (const r of rows) {
     const burden = inferBurdenOwner(r);
