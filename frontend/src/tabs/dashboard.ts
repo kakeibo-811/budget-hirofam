@@ -102,12 +102,11 @@ export function renderDashboard(root: HTMLElement) {
           [L('妻が夫分を払った控除', 'Credit: Husband cost paid by Wife'), -wb.credit_husband_paid_by_wife],
           [L('振込予定', 'Transfer due'), data.settlement.wife_due_to_husband],
         ], true),
-        detailCard('👨', L('夫側の支払い状況', 'Husband payment status'), L('夫自身の負担と、先に払った家計支払の確認です。', 'Shows Husband own burden and household payments advanced by Husband.'), [
-          [L('夫負担分', 'Husband own share'), data.household.husband_only],
-          [L('折半対象総額', 'Split total'), data.household.split_total],
-          [L('固定費', 'Fixed costs'), data.household.fixed_total],
+        detailCard('👨', L('夫の最終負担内訳', 'Husband final burden breakdown'), L('夫が実際に払った額ではなく、最終的に夫が負担する家計費です。夫個人負担＋折半の夫負担で見ます。', 'This is not the cash actually paid by Husband; it is the household cost Husband ultimately bears.'), [
+          [L('夫個人負担', 'Husband-only burden'), data.household.husband_only],
+          [L('折半の夫負担', 'Husband split share'), data.settlement.husband_split_share],
           [L('夫最終負担', 'Husband final burden'), data.settlement.husband_final_burden],
-        ]),
+        ], true),
       ]);
       hero.appendChild(detailGrid);
       hero.appendChild(aggregationExplanation(data));
