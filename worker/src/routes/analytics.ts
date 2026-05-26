@@ -147,6 +147,14 @@ function occursByRecurrence(sp: any, month: string): boolean {
   return year >= startYear && (year - startYear) % interval === 0;
 }
 
+function activeInMonth(sp: any, month: string): boolean {
+  const from = String(sp.active_from_month || '');
+  const to = String(sp.active_to_month || '');
+  if (/^\d{4}-\d{2}$/.test(from) && month < from) return false;
+  if (/^\d{4}-\d{2}$/.test(to) && month > to) return false;
+  return true;
+}
+
 async function scheduledOccurrences(db: D1Database, period: { start: string; end: string }, month: string): Promise<any[]> {
   const rows = await selectAll<any>(db, `SELECT sp.*, a.name AS account_name FROM scheduled_payments sp LEFT JOIN accounts a ON a.id = sp.account_id WHERE sp.archived_at IS NULL AND sp.active = 1 ORDER BY sp.sort_order ASC, sp.id ASC`);
   const months = [month, addMonths(month, 1)];
@@ -155,18 +163,20 @@ async function scheduledOccurrences(db: D1Database, period: { start: string; end
     const freq = String(sp.frequency || 'monthly');
     if (freq === 'monthly') {
       for (const m of months) {
+        if (!activeInMonth(sp, m)) continue;
         const d = dueDateForMonthly(m, Number(sp.due_day || 1));
         if (inRange(d, period.start, period.end)) out.push({ ...sp, due: d });
       }
     } else if (freq === 'yearly' || freq === 'every_3_years' || freq === 'every_5_years') {
       for (const m of months) {
+        if (!activeInMonth(sp, m)) continue;
         const [y, mm] = m.split('-').map(Number);
         if (freq === 'yearly' && Number(sp.due_month || 0) !== mm) continue;
         if ((freq === 'every_3_years' || freq === 'every_5_years') && !occursByRecurrence(sp, m)) continue;
         const d = `${y}-${String(mm).padStart(2, '0')}-${String(Math.min(Number(sp.due_day || 1), daysInMonth(y, mm))).padStart(2, '0')}`;
         if (inRange(d, period.start, period.end)) out.push({ ...sp, due: d });
       }
-    } else if (sp.due_date && inRange(sp.due_date, period.start, period.end)) {
+    } else if (sp.due_date && activeInMonth(sp, String(sp.due_date).slice(0, 7)) && inRange(sp.due_date, period.start, period.end)) {
       out.push({ ...sp, due: sp.due_date });
     }
   }

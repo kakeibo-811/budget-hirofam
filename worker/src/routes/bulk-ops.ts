@@ -35,8 +35,8 @@ const ENTITIES: Record<string, EntityConfig> = {
   scheduled_payments: {
     table: 'scheduled_payments', label: 'Scheduled payments', idColumn: 'id', softDeleteColumn: 'archived_at', updatedAt: true,
     defaultSort: 'sort_order', allowedSort: ['sort_order','name','amount','due_date','due_day','id'],
-    allowedUpdate: ['name','amount','frequency','due_day','due_month','due_date','paid_by','burden_owner','split','account_id','category','active','note','sort_order'],
-    selectSql: `SELECT id, name, amount, frequency, due_day, due_month, due_date, paid_by, burden_owner, split, account_id, category, active, note, sort_order, archived_at FROM scheduled_payments`,
+    allowedUpdate: ['name','amount','frequency','due_day','due_month','due_date','interval_years','recurrence_start_year','active_from_month','active_to_month','paid_by','burden_owner','split','account_id','category','active','note','sort_order'],
+    selectSql: `SELECT id, name, amount, frequency, due_day, due_month, due_date, interval_years, recurrence_start_year, active_from_month, active_to_month, paid_by, burden_owner, split, account_id, category, active, note, sort_order, archived_at FROM scheduled_payments`,
   },
   incomes: {
     table: 'incomes', label: 'Incomes', idColumn: 'id', softDeleteColumn: 'archived_at', updatedAt: false,

@@ -11,6 +11,9 @@ export function renderCards(root: HTMLElement) {
   root.appendChild(el('div', { class: 'banner banner-info' }, [
     L('カードごとの種類・締め日・支払日・既定の実支払者/負担者を管理します。CSVの請求月や家計月の判定に使います。', 'Manage each card type, closing day, payment day, default actual payer, and default burden owner. These rules are used for CSV billing-month and budget-cycle decisions.'),
   ]));
+  root.appendChild(el('div', { class: 'banner banner-warn' }, [
+    L('PayPal・振込・税金・保険などカード以外の支払いは、カードではなく「固定費」タブの予定支払いとして登録してください。', 'Register PayPal, transfers, taxes, insurance, and other non-card payments in Fixed Costs scheduled payments, not as cards.'),
+  ]));
   root.appendChild(content);
   load(content);
 }
@@ -21,8 +24,7 @@ async function load(content: HTMLElement) {
   try {
     const data = await api.get<{ items: any[] }>('/api/cards');
     clear(content);
-    const add = cardForm(null, () => load(content));
-    content.appendChild(add);
+    content.appendChild(cardForm(null, () => load(content)));
     const grid = el('div', { class: 'card-list-grid' });
     for (const c of data.items) grid.appendChild(cardBox(c, () => load(content)));
     content.appendChild(grid);
@@ -36,7 +38,10 @@ function cardBox(c: any, refresh: () => void): HTMLElement {
   const details = el('details', { class: 'credit-card-box' }, [
     el('summary', {}, [
       el('div', { class: 'card-logo' }, ['💳']),
-      el('div', { class: 'card-title' }, [el('strong', {}, [c.name]), el('span', { class: 'muted' }, [`${kindLabel(c.card_kind)} ・ ${closeLabel(c.close_day)} ・ ${payLabel(c.pay_day)} ・ ${ownerLabel(c.owner)}`])]),
+      el('div', { class: 'card-title' }, [
+        el('strong', {}, [c.name]),
+        el('span', { class: 'muted' }, [`${kindLabel(c.card_kind)} / ${closeLabel(c.close_day)} / ${payLabel(c.pay_day)} / ${ownerLabel(c.owner)}`]),
+      ]),
       el('span', { class: 'chevron' }, ['›']),
     ]),
   ]);
@@ -47,8 +52,18 @@ function cardBox(c: any, refresh: () => void): HTMLElement {
 function cardForm(c: any | null, refresh: () => void): HTMLElement {
   const box = el('div', { class: 'card-edit-form' });
   if (!c) box.appendChild(el('h3', {}, [L('カードを追加', 'Add card')]));
+  if (c && !['credit', 'debit'].includes(String(c.card_kind || ''))) {
+    box.appendChild(el('div', { class: 'banner banner-warn' }, [
+      L('これはカード以外の支払いとして登録されています。今後は固定費タブの予定支払いへ移してください。', 'This is registered as a non-card payment. Move future use to Fixed Costs scheduled payments.'),
+    ]));
+  }
+
   const name = input(t('common.card'), 'text', c?.name || '');
-  const kind = select([['credit', L('クレジット', 'Credit')], ['debit', L('デビット', 'Debit')], ['paypal', 'PayPal'], ['manual', L('その他', 'Other')]], c?.card_kind || 'credit');
+  const kindOptions = [['credit', L('クレジット', 'Credit')], ['debit', L('デビット', 'Debit')]];
+  if (c && !['credit', 'debit'].includes(String(c.card_kind || ''))) {
+    kindOptions.push([c.card_kind, `${kindLabel(c.card_kind)} ${L('（固定費タブへ移行推奨）', '(move to Fixed Costs)')}`]);
+  }
+  const kind = select(kindOptions, c?.card_kind || 'credit');
   const owner = select([['toshi', L('夫', 'Husband')], ['lisa', L('妻', 'Wife')], ['shared', L('両方/共同', 'Both / Shared')]], c?.owner || 'toshi');
   const close = input(t('common.close_day'), 'number', c?.close_day || 31);
   const pay = input(t('common.pay_day'), 'number', c?.pay_day || 27);
@@ -69,8 +84,16 @@ function cardForm(c: any | null, refresh: () => void): HTMLElement {
     if (c) await api.patch(`/api/cards/${c.id}`, payload); else await api.post('/api/cards', payload);
     refresh();
   }}, [c ? t('common.save') : t('common.add')]);
+
   const children = [name, kind, owner, close, pay, paidBy, burden, note, save];
-  if (c) children.push(el('button', { class: 'ghost danger', onClick: async () => { if (confirm(L('このカードをアーカイブしますか？', 'Archive this card?'))) { await api.delete(`/api/cards/${c.id}`); refresh(); } } }, [t('common.delete')]));
+  if (c) {
+    children.push(el('button', { class: 'ghost danger', onClick: async () => {
+      if (confirm(L('このカードをアーカイブしますか？', 'Archive this card?'))) {
+        await api.delete(`/api/cards/${c.id}`);
+        refresh();
+      }
+    } }, [t('common.delete')]));
+  }
   box.appendChild(el('div', { class: 'form-grid compact-form' }, children));
   return box;
 }
@@ -79,11 +102,13 @@ function input(label: string, type = 'text', value: any = ''): HTMLElement {
   const i = el('input', { type, placeholder: label, value: String(value ?? '') });
   return el('label', { class: 'field' }, [el('span', {}, [label]), i]);
 }
+
 function select(options: string[][], value = ''): HTMLElement {
   const s = el('select');
   for (const [v, label] of options) s.appendChild(el('option', { value: v, selected: v === value ? 'selected' : null }, [label]));
   return s;
 }
+
 function closeLabel(day: number) { return Number(day) >= 28 ? L('月末締め', 'End-of-month closing') : L(`${day}日締め`, `Closes on day ${day}`); }
-function payLabel(day: number) { return L(`${day}日支払`, `Pays on day ${day}`); }
+function payLabel(day: number) { return L(`${day}日支払い`, `Pays on day ${day}`); }
 function kindLabel(kind: string) { return ({ credit: L('カード', 'Card'), debit: L('デビット', 'Debit'), paypal: 'PayPal', manual: L('その他', 'Other') } as any)[kind] || L('カード', 'Card'); }

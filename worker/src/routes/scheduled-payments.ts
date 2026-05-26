@@ -14,6 +14,8 @@ type ScheduledPayment = {
   due_date: string | null;
   interval_years: number | null;
   recurrence_start_year: number | null;
+  active_from_month: string | null;
+  active_to_month: string | null;
   paid_by: string;
   burden_owner: string;
   split: number;
@@ -51,6 +53,11 @@ function startYearFrom(input: any, dueDate: any): number | null {
   return yn > 1900 ? yn : null;
 }
 
+function cleanMonth(v: any): string | null {
+  const s = String(v || '').trim();
+  return /^\d{4}-\d{2}$/.test(s) ? s : null;
+}
+
 app.get('/', async (c) => {
   const rows = await selectAll<ScheduledPayment>(
     c.env.DB,
@@ -72,8 +79,8 @@ app.post('/', async (c) => {
   const recurrenceStartYear = startYearFrom(b.recurrence_start_year, b.due_date);
   const r = await c.env.DB.prepare(
     `INSERT INTO scheduled_payments
-     (name, amount, frequency, due_day, due_month, due_date, interval_years, recurrence_start_year, paid_by, burden_owner, split, category, account_id, active, note, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     (name, amount, frequency, due_day, due_month, due_date, interval_years, recurrence_start_year, active_from_month, active_to_month, paid_by, burden_owner, split, category, account_id, active, note, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     String(b.name || '').trim(),
     Math.round(Number(b.amount || 0)),
@@ -83,6 +90,8 @@ app.post('/', async (c) => {
     b.due_date || null,
     intervalYears,
     recurrenceStartYear,
+    cleanMonth(b.active_from_month),
+    cleanMonth(b.active_to_month),
     paidBy,
     burdenOwner,
     b.split ? 1 : 0,
@@ -103,7 +112,9 @@ app.patch('/:id', async (c) => {
   if ('frequency' in b) b.frequency = cleanFrequency(b.frequency);
   if ('interval_years' in b) b.interval_years = intervalForFrequency(b.frequency || '', b.interval_years);
   if ('recurrence_start_year' in b) b.recurrence_start_year = startYearFrom(b.recurrence_start_year, b.due_date);
-  const allowed = ['name', 'amount', 'frequency', 'due_day', 'due_month', 'due_date', 'interval_years', 'recurrence_start_year', 'paid_by', 'burden_owner', 'split', 'category', 'account_id', 'active', 'note', 'sort_order'];
+  if ('active_from_month' in b) b.active_from_month = cleanMonth(b.active_from_month);
+  if ('active_to_month' in b) b.active_to_month = cleanMonth(b.active_to_month);
+  const allowed = ['name', 'amount', 'frequency', 'due_day', 'due_month', 'due_date', 'interval_years', 'recurrence_start_year', 'active_from_month', 'active_to_month', 'paid_by', 'burden_owner', 'split', 'category', 'account_id', 'active', 'note', 'sort_order'];
   const sets = allowed.filter((k) => k in b);
   if (sets.length === 0) return c.json({ error: 'no fields' }, 400);
   await exec(c.env.DB, `UPDATE scheduled_payments SET ${sets.map((k) => `${k} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...sets.map((k) => b[k]), id]);

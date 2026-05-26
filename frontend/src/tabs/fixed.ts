@@ -208,6 +208,15 @@ function accountOptions(accounts: Account[]): [string, string][] {
   ];
 }
 
+function periodLabel(item: any): string {
+  const from = item.active_from_month || "";
+  const to = item.active_to_month || "";
+  if (from && to) return `${from} - ${to}`;
+  if (from) return L(`${from} から`, `From ${from}`);
+  if (to) return L(`${to} まで`, `Until ${to}`);
+  return L("期限なし", "No period limit");
+}
+
 function fixedCreateForm(
   accounts: Account[],
   refresh: () => void,
@@ -450,12 +459,12 @@ function scheduledSection(
   ]);
   const wrap = el("div", { class: "table-wrap" });
   const table = el("table", { class: "data compact-table" });
-  table.innerHTML = `<thead><tr><th>${L("名称", "Name")}</th><th class="num">${L("金額", "Amount")}</th><th>${L("頻度", "Frequency")}</th><th>${L("支払時点", "Due timing")}</th><th>${L("実支払", "Actual payer")}</th><th>${L("負担", "Burden")}</th><th>${L("口座", "Account")}</th><th>${t("common.actions")}</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${L("名称", "Name")}</th><th class="num">${L("金額", "Amount")}</th><th>${L("頻度", "Frequency")}</th><th>${L("支払時点", "Due timing")}</th><th>${L("支払い期間", "Active period")}</th><th>${L("実支払", "Actual payer")}</th><th>${L("負担", "Burden")}</th><th>${L("口座", "Account")}</th><th>${t("common.actions")}</th></tr></thead>`;
   const tb = el("tbody");
   if (items.length === 0)
     tb.appendChild(
       el("tr", {}, [
-        el("td", { colspan: "8", class: "muted" }, [
+        el("td", { colspan: "9", class: "muted" }, [
           L("支払予定がありません", "No scheduled payments"),
         ]),
       ]),
@@ -478,6 +487,7 @@ function scheduledSection(
         el("td", { class: "num" }, [formatYen(p.amount)]),
         el("td", {}, [frequencyText(p.frequency)]),
         el("td", {}, [due]),
+        el("td", {}, [periodLabel(p)]),
         el("td", {}, [ownerLabel(p.paid_by)]),
         el("td", {}, [ownerLabel(p.burden_owner)]),
         el("td", {}, [p.account_name || "—"]),
@@ -528,6 +538,8 @@ function scheduledForm(accounts: Account[], refresh: () => void): HTMLElement {
   const dueMonth = input(L("支払月", "Payment month"), "number");
   const recurrenceStartYear = input(L("開始年（3年/5年ごと）", "Start year (3/5-year)"), "number", "2026");
   const dueDate = input(L("1回のみの日付", "One-time date"), "date");
+  const activeFrom = input(L("支払い開始月", "Active from month"), "month");
+  const activeTo = input(L("支払い終了月", "Active to month"), "month");
   const paidBy = selectField(
     L("実際に払う人", "Actual payer"),
     payerOptions(),
@@ -564,6 +576,8 @@ function scheduledForm(accounts: Account[], refresh: () => void): HTMLElement {
           recurrence_start_year: Number(getInput(recurrenceStartYear).value || 0) || null,
           interval_years: getSelect(frequency).value === 'every_3_years' ? 3 : getSelect(frequency).value === 'every_5_years' ? 5 : null,
           due_date: getInput(dueDate).value || null,
+          active_from_month: getInput(activeFrom).value || null,
+          active_to_month: getInput(activeTo).value || null,
           paid_by: getSelect(paidBy).value,
           burden_owner: getSelect(burden).value,
           split: getSelect(burden).value === "shared" ? 1 : 0,
@@ -585,6 +599,8 @@ function scheduledForm(accounts: Account[], refresh: () => void): HTMLElement {
       dueMonth,
       recurrenceStartYear,
       dueDate,
+      activeFrom,
+      activeTo,
       paidBy,
       burden,
       account,
@@ -623,6 +639,10 @@ async function editScheduled(p: any, accounts: Account[], refresh: () => void) {
   if (dueMonth === null) return;
   const recurrenceStartYear = prompt(L("開始年（3年/5年ごと）", "Start year (3/5-year)"), String(p.recurrence_start_year || String(p.due_date || '').slice(0,4) || "2026"));
   if (recurrenceStartYear === null) return;
+  const activeFrom = prompt(L("支払い開始月 YYYY-MM（空欄可）", "Active from month YYYY-MM (optional)"), p.active_from_month || "");
+  if (activeFrom === null) return;
+  const activeTo = prompt(L("支払い終了月 YYYY-MM（空欄可）", "Active to month YYYY-MM (optional)"), p.active_to_month || "");
+  if (activeTo === null) return;
   const paidBy = prompt(
     L(
       "実際に払う人: toshi / lisa / shared",
@@ -653,6 +673,8 @@ async function editScheduled(p: any, accounts: Account[], refresh: () => void) {
     recurrence_start_year: Number(recurrenceStartYear || 0) || null,
     interval_years: frequency === 'every_3_years' ? 3 : frequency === 'every_5_years' ? 5 : null,
     due_date: dueDate || null,
+    active_from_month: activeFrom || null,
+    active_to_month: activeTo || null,
     paid_by: paidBy,
     burden_owner: burden,
     split: burden === "shared" ? 1 : 0,

@@ -486,6 +486,10 @@ function recurrenceInterval(sp: any): number | null {
 }
 
 function scheduledPaymentOccursInMonth(sp: any, month: string): boolean {
+  const from = String(sp.active_from_month || '');
+  const to = String(sp.active_to_month || '');
+  if (/^\d{4}-\d{2}$/.test(from) && month < from) return false;
+  if (/^\d{4}-\d{2}$/.test(to) && month > to) return false;
   const [year, monthNum] = month.split('-').map(Number);
   const freq = String(sp.frequency || 'monthly').toLowerCase();
   if (freq === 'monthly') return true;
