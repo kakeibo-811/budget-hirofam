@@ -612,6 +612,10 @@ textarea {
 textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120px; }
 
 /* Phase7 dashboard: salary-cycle settlement overview */
+.dashboard-page {
+  display: grid;
+  gap: 14px;
+}
 .dashboard-hero {
   border: 1px solid var(--border);
   border-radius: 22px;
@@ -619,6 +623,151 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
   margin-bottom: 14px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 50%, var(--bg-card)), var(--bg-card));
   box-shadow: var(--shadow-md);
+}
+.redesigned-dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  gap: 18px;
+  align-items: stretch;
+  background: var(--bg-card);
+}
+.dashboard-hero-copy {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+}
+.dashboard-hero-copy h2 {
+  margin: 4px 0 8px;
+  font-size: clamp(24px, 3.4vw, 36px);
+  line-height: 1.15;
+}
+.transfer-decision-panel {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--bg-card));
+}
+.decision-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.decision-amount {
+  font-family: var(--font-num);
+  font-size: clamp(34px, 6vw, 54px);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.decision-sub {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dashboard-actions,
+.dashboard-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.dashboard-formula-strip {
+  display: grid;
+  grid-template-columns: repeat(8, auto);
+  gap: 8px;
+  align-items: stretch;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.formula-term {
+  min-width: 140px;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+}
+.formula-term span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.formula-term strong {
+  font-family: var(--font-num);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.formula-total {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--bg-card));
+}
+.formula-operator {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  color: var(--text-muted);
+  font-weight: 900;
+}
+.dashboard-primary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.dashboard-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.dashboard-card h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.dashboard-card p {
+  margin: 0;
+}
+.dashboard-amount-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.amount-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-highlight);
+}
+.amount-row span {
+  min-width: 0;
+}
+.amount-row small {
+  display: block;
+  margin-top: 2px;
+}
+.amount-row strong {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.amount-row-total {
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 66%, var(--bg-card));
+  font-weight: 800;
+}
+.dashboard-person-stack {
+  display: grid;
+  gap: 12px;
 }
 .dashboard-title-row {
   display: grid;
@@ -717,6 +866,9 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
   gap: 8px;
   margin-top: 12px;
 }
+.dashboard-policy {
+  margin-bottom: 0;
+}
 .settlement-total { font-weight: 700; }
 .settlement-transfer {
   background: color-mix(in srgb, var(--accent-soft) 75%, var(--bg-card));
@@ -726,6 +878,25 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
 .tab-btn[draggable="true"]:active { cursor: grabbing; }
 @media (max-width: 760px) {
   .dashboard-hero { padding: 12px; border-radius: 16px; }
+  .redesigned-dashboard-hero,
+  .dashboard-primary-grid {
+    grid-template-columns: 1fr;
+  }
+  .transfer-decision-panel {
+    padding: 14px;
+  }
+  .dashboard-formula-strip {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+  }
+  .amount-row,
+  .settlement-row {
+    align-items: flex-start;
+  }
+  .aggregation-row-actions {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+  }
   .dashboard-title-row,
   .dashboard-detail-grid,
   .dashboard-cash-grid { grid-template-columns: 1fr; }
