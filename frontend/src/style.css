@@ -1428,19 +1428,53 @@ button.ghost.danger {
   }
 
   .dashboard-page {
-    gap: 10px;
+    gap: 8px;
+  }
+
+  .redesigned-dashboard-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    box-shadow: none;
   }
 
   .dashboard-hero-copy h2 {
-    font-size: 21px;
+    font-size: 16px;
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .dashboard-hero-copy {
+    order: 2;
+    padding: 0 2px;
+  }
+
+  .dashboard-hero-copy .eyebrow {
+    display: none;
+  }
+
+  .dashboard-hero-copy .muted {
+    font-size: 10px;
   }
 
   .transfer-decision-panel {
+    order: 1;
     padding: 12px;
+    gap: 6px;
+    border-radius: 16px;
   }
 
   .decision-amount {
-    font-size: clamp(26px, 9vw, 34px);
+    font-size: clamp(30px, 11vw, 40px);
+    letter-spacing: 0;
+  }
+
+  .decision-label,
+  .decision-sub {
+    font-size: 11px;
   }
 
   .dashboard-actions,
@@ -1452,48 +1486,143 @@ button.ghost.danger {
   .dashboard-actions button,
   .dashboard-card-actions button {
     width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
+  .dashboard-formula-strip {
+    padding: 8px;
+    gap: 4px;
+    border-radius: 14px;
+    box-shadow: none;
   }
 
   .formula-term {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    padding: 7px 8px;
+    border-radius: 12px;
+  }
+
+  .formula-term span {
+    font-size: 10px;
   }
 
   .formula-term strong {
-    font-size: 15px;
+    font-size: 13px;
     text-align: right;
+  }
+
+  .formula-operator {
+    min-height: 12px;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .dashboard-primary-grid {
+    gap: 8px;
+  }
+
+  .dashboard-card h3 {
+    font-size: 14px;
+  }
+
+  .dashboard-card p,
+  .section-head .muted {
+    font-size: 10px;
+  }
+
+  .dashboard-amount-list,
+  .settlement-list {
+    gap: 5px;
+    margin-top: 8px;
   }
 
   .amount-row,
   .settlement-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 4px;
+    display: flex;
+    align-items: center;
+    padding: 7px 8px;
+    gap: 8px;
   }
 
   .amount-row strong,
   .settlement-row strong {
-    justify-self: end;
+    margin-left: auto;
+    text-align: right;
     white-space: normal;
     overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+
+  .amount-row span,
+  .settlement-row span {
+    font-size: 12px;
+  }
+
+  .amount-row small,
+  .settlement-row small {
+    display: none;
   }
 
   .aggregation-row-actions {
     width: 100%;
-    display: grid;
-    grid-template-columns: 1fr;
-    align-items: stretch;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .aggregation-row-actions strong {
-    justify-self: end;
+    margin-left: 0;
+  }
+
+  .aggregation-row-actions button {
+    min-height: 34px;
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+
+  .person-cash-card {
+    padding: 10px;
+  }
+
+  .person-head {
+    margin-bottom: 6px;
+  }
+
+  .person-balance {
+    font-size: 20px;
+  }
+
+  .badge {
+    padding: 3px 7px;
+    font-size: 10px;
   }
 
   .dashboard-evidence-summary,
   .section-head {
     display: grid;
     grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .transfer-breakdown-card,
+  #dashboard-evidence-rows,
+  .dashboard-aggregation-card,
+  .message-inline-card,
+  .dashboard-policy {
+    margin-top: 2px;
+  }
+
+  .transfer-breakdown-card > summary,
+  .collapse summary {
+    padding: 10px 2px;
+    font-size: 13px;
+  }
+
+  .dashboard-plan-details {
+    gap: 6px;
   }
 
   .credit-card-box > summary {
@@ -1534,10 +1663,11 @@ button.ghost.danger {
     border-left: none;
     border-right: none;
     border-radius: 0;
+    max-height: 52vh;
   }
 
   table.data {
-    min-width: 560px;
+    min-width: 520px;
     font-size: 11px;
   }
 

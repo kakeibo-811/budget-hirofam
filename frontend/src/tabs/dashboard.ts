@@ -297,7 +297,7 @@ function planRowsTable(id: string, title: string, rows: any[]): HTMLElement {
 }
 
 function transferBreakdown(lines: any[]): HTMLElement {
-  const box = el('details', { class: 'dashboard-card transfer-breakdown-card', open: true }, [
+  const box = el('details', { class: 'dashboard-card transfer-breakdown-card' }, [
     el('summary', {}, [L('妻→夫 振込予定の根拠明細', 'Wife to Husband transfer evidence')]),
   ]);
   if (!lines.length) {
