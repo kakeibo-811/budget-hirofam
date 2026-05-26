@@ -19,6 +19,8 @@ type FixedMaster = {
   category?: string | null;
   frequency?: string | null;
   due_date?: string | null;
+  active_from_month?: string | null;
+  active_to_month?: string | null;
   note?: string | null;
   sort_order: number;
   account_name?: string | null;
@@ -89,6 +91,19 @@ function boolSplit(owner: Owner, split: any): 0 | 1 {
   return Number(split || 0) === 1 ? 1 : 0;
 }
 
+function cleanMonth(v: any): string | null {
+  const s = String(v || '').trim();
+  return /^\d{4}-\d{2}$/.test(s) ? s : null;
+}
+
+function activeInMonth(row: any, month: string): boolean {
+  const from = String(row.active_from_month || '');
+  const to = String(row.active_to_month || '');
+  if (/^\d{4}-\d{2}$/.test(from) && month < from) return false;
+  if (/^\d{4}-\d{2}$/.test(to) && month > to) return false;
+  return true;
+}
+
 async function ensureSnapshots(db: D1Database, month: string): Promise<{ created: number }> {
   const masters = await selectAll<FixedMaster>(
     db,
@@ -96,6 +111,7 @@ async function ensureSnapshots(db: D1Database, month: string): Promise<{ created
   );
   let created = 0;
   for (const m of masters) {
+    if (!activeInMonth(m, month)) continue;
     const due = dueDateForMonth(month, m.pay_day || 1);
     const r = await db.prepare(
       `INSERT INTO fixed_cost_snapshots
@@ -130,8 +146,10 @@ async function fixedOccurrences(db: D1Database, month: string): Promise<any[]> {
      LEFT JOIN accounts a ON a.id = f.account_id
      LEFT JOIN ledger_links l ON l.source_type = 'fixed_cost' AND l.source_id = s.id
      WHERE s.month = ? AND f.archived_at IS NULL
+       AND (f.active_from_month IS NULL OR f.active_from_month = '' OR f.active_from_month <= ?)
+       AND (f.active_to_month IS NULL OR f.active_to_month = '' OR f.active_to_month >= ?)
      ORDER BY due ASC, s.id ASC`,
-    [month]
+    [month, month, month]
   );
 }
 
@@ -175,8 +193,8 @@ app.post('/', async (c) => {
   const split = boolSplit(burdenOwner || owner, b.split);
   const r = await c.env.DB.prepare(
     `INSERT INTO fixed_costs
-     (name, amount, owner, split, pay_day, paid_by, burden_owner, account_id, category, frequency, due_date, note, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    (name, amount, owner, split, pay_day, paid_by, burden_owner, account_id, category, frequency, due_date, active_from_month, active_to_month, note, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     String(b.name || '').trim(),
     Math.round(Number(b.amount || 0)),
@@ -189,6 +207,8 @@ app.post('/', async (c) => {
     b.category || 'fixed_cost',
     cleanFrequency(b.frequency || 'monthly'),
     b.due_date || null,
+    cleanMonth(b.active_from_month),
+    cleanMonth(b.active_to_month),
     b.note || null,
     b.sort_order ? Number(b.sort_order) : 0
   ).run();
@@ -236,6 +256,8 @@ app.patch('/:id', async (c) => {
     category: (v) => String(v || 'fixed_cost'),
     frequency: cleanFrequency,
     due_date: (v) => v || null,
+    active_from_month: cleanMonth,
+    active_to_month: cleanMonth,
     note: (v) => v ?? null,
     sort_order: (v) => Number(v || 0),
   };

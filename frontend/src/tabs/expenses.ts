@@ -25,6 +25,7 @@ type Expense = {
   billing_month: string;
   payment_due_date?: string | null;
   cycle_month?: string | null;
+  payment_method?: string | null;
   card_id?: number | null;
   card_name?: string | null;
   category?: string | null;
@@ -82,6 +83,16 @@ function ownerSelect(value?: string | null): HTMLSelectElement {
 }
 function monthFromDate(date: string): string { return /^\d{4}-\d{2}/.test(date || '') ? date.slice(0, 7) : ''; }
 function valueOrEmpty(v: unknown): string { return v === null || v === undefined ? '' : String(v); }
+function paymentMethodText(v?: string | null): string {
+  const map: Record<string, string> = { card: L('カード', 'Card'), bank_transfer: L('口座振替・銀行振込', 'Bank transfer/debit'), cash_debit: L('現金・デビット', 'Cash / Debit'), other: L('その他', 'Other') };
+  return map[String(v || '')] || '-';
+}
+function paymentMethodSelect(value?: string | null): HTMLSelectElement {
+  const s = el('select') as HTMLSelectElement;
+  [['card', paymentMethodText('card')], ['bank_transfer', paymentMethodText('bank_transfer')], ['cash_debit', paymentMethodText('cash_debit')], ['other', paymentMethodText('other')]].forEach(([v, label]) => s.appendChild(el('option', { value: v }, [label])));
+  s.value = value || 'card';
+  return s;
+}
 
 function renderPreview(rows: ExpenseImportRow[], warnings: string[], onRowsChange?: () => void): HTMLElement {
   const box = el('div', { class: 'card' }, [el('h3', {}, [L('取り込みプレビュー', 'Import Preview')])]);
@@ -139,6 +150,7 @@ function expenseForm(args: {
   const description = el('input', { value: valueOrEmpty(e.description), placeholder: L('店名・内容', 'Merchant / Description') }) as HTMLInputElement;
   const burden = ownerSelect(e.burden_owner || e.payer || 'other');
   const paidBy = ownerSelect(e.paid_by || 'toshi');
+  const paymentMethod = paymentMethodSelect(e.payment_method || (e.card_id ? 'card' : 'bank_transfer'));
   const billingMonth = el('input', { type: 'month', value: valueOrEmpty(e.billing_month || monthFromDate(e.date || '')) }) as HTMLInputElement;
   const paymentDueDate = el('input', { type: 'date', value: valueOrEmpty(e.payment_due_date) }) as HTMLInputElement;
   const cycleMonth = el('input', { type: 'month', value: valueOrEmpty(e.cycle_month || e.billing_month || monthFromDate(e.payment_due_date || e.date || '')) }) as HTMLInputElement;
@@ -155,6 +167,7 @@ function expenseForm(args: {
   form.appendChild(field(t('common.description'), description));
   form.appendChild(field(L('負担者', 'Burden owner'), burden));
   form.appendChild(field(L('実支払者', 'Paid by'), paidBy));
+  form.appendChild(field(L('支払い手段', 'Payment method'), paymentMethod));
   form.appendChild(field(t('common.billing_month'), billingMonth));
   form.appendChild(field(L('支払予定日', 'Payment date'), paymentDueDate));
   form.appendChild(field(L('家計月', 'Budget month'), cycleMonth));
@@ -170,6 +183,7 @@ function expenseForm(args: {
         payer: burden.value,
         burden_owner: burden.value,
         paid_by: paidBy.value,
+        payment_method: paymentMethod.value,
         billing_month: billingMonth.value,
         payment_due_date: paymentDueDate.value,
         cycle_month: cycleMonth.value,
@@ -422,6 +436,7 @@ export function renderExpenses(root: HTMLElement) {
           el('td', {}, [ex.description ?? '']),
           el('td', {}, [labelPayer(ex.burden_owner || ex.payer)]),
           el('td', {}, [labelPayer(ex.paid_by)]),
+          el('td', {}, [paymentMethodText(ex.payment_method || (ex.card_id ? 'card' : ''))]),
           el('td', { class: 'mono' }, [ex.cycle_month ?? ex.billing_month ?? '']),
           el('td', { class: 'mono' }, [ex.billing_month ?? '']),
           el('td', { class: 'mono' }, [ex.payment_due_date ?? '—']),

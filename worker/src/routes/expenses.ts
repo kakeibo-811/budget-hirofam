@@ -33,6 +33,7 @@ type ExpenseRow = {
   pay_day?: number | null;
   payment_due_date?: string | null;
   cycle_month?: string | null;
+  payment_method?: string | null;
   archived_at?: string | null;
 };
 
@@ -443,9 +444,9 @@ app.get('/export.csv', async (c) => {
     params
   );
   const headers = lang === 'en'
-    ? ['date', 'amount', 'description', 'burden_owner', 'paid_by', 'billing_month', 'cycle_month', 'payment_due_date', 'card_name', 'category', 'note']
-    : ['日付', '金額', '内容', '負担者', '実支払者', '請求月', '家計月', '支払予定日', 'カード名', 'カテゴリ', 'メモ'];
-  const body = rows.map((x) => withPaymentDate(x)).map((r) => [r.date, r.amount, r.description, r.burden_owner || r.payer, r.paid_by || '', r.billing_month, r.cycle_month || '', r.payment_due_date || '', r.card_name || '', r.category || '', r.note || '']);
+    ? ['date', 'amount', 'description', 'burden_owner', 'paid_by', 'payment_method', 'billing_month', 'cycle_month', 'payment_due_date', 'card_name', 'category', 'note']
+    : ['日付', '金額', '内容', '負担者', '実支払者', '支払い手段', '請求月', '家計月', '支払予定日', 'カード名', 'カテゴリ', 'メモ'];
+  const body = rows.map((x) => withPaymentDate(x)).map((r) => [r.date, r.amount, r.description, r.burden_owner || r.payer, r.paid_by || '', r.payment_method || (r.card_id ? 'card' : ''), r.billing_month, r.cycle_month || '', r.payment_due_date || '', r.card_name || '', r.category || '', r.note || '']);
   return new Response(BOM + [headers.map(csvEscape).join(','), ...body.map((r) => r.map(csvEscape).join(','))].join('\n') + '\n', {
     headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="expenses-${month || 'all'}.csv"` },
   });
@@ -473,10 +474,11 @@ app.post('/', async (c) => {
   const cycleMonth = normalizeMonth(body.cycle_month) || cycleMonthForDate(preferredCycleBasis(paymentDueDate, date));
   const paidBy = normalizePayer(body.paid_by || card?.default_paid_by || card?.owner || payer);
   const burdenOwner = normalizePayer(body.burden_owner || payer);
+  const paymentMethod = String(body.payment_method || (body.card_id ? 'card' : 'other')).trim() || null;
   const r = await c.env.DB.prepare(
-    `INSERT INTO expenses (date, amount, description, payer, paid_by, burden_owner, billing_month, payment_due_date, cycle_month, card_id, category, note)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(date, amount, body.description, burdenOwner, paidBy, burdenOwner, billingMonth, paymentDueDate, cycleMonth, body.card_id ? Number(body.card_id) : null, body.category ?? null, body.note ?? null).run();
+    `INSERT INTO expenses (date, amount, description, payer, paid_by, burden_owner, billing_month, payment_due_date, cycle_month, card_id, category, note, payment_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(date, amount, body.description, burdenOwner, paidBy, burdenOwner, billingMonth, paymentDueDate, cycleMonth, body.card_id ? Number(body.card_id) : null, body.category ?? null, body.note ?? null, paymentMethod).run();
   const id = Number(r.meta.last_row_id);
   const after = await selectOne<ExpenseRow>(c.env.DB, `SELECT * FROM expenses WHERE id = ?`, [id]);
   await logUndo(c.env.DB, 'create', id, null, after);
@@ -498,6 +500,7 @@ app.patch('/:id', async (c) => {
   if ('card_id' in body) next.card_id = body.card_id ? Number(body.card_id) : null;
   if ('category' in body) next.category = body.category || null;
   if ('note' in body) next.note = body.note || null;
+  if ('payment_method' in body) next.payment_method = String(body.payment_method || '').trim() || null;
 
   const card = next.card_id ? await selectOne<Card>(c.env.DB, `SELECT * FROM cards WHERE id = ?`, [Number(next.card_id)]) : null;
   if ('billing_month' in body) next.billing_month = normalizeMonth(body.billing_month) || next.billing_month;
@@ -512,8 +515,8 @@ app.patch('/:id', async (c) => {
 
   await exec(
     c.env.DB,
-    `UPDATE expenses SET date = ?, amount = ?, description = ?, payer = ?, paid_by = ?, burden_owner = ?, billing_month = ?, payment_due_date = ?, cycle_month = ?, card_id = ?, category = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [next.date, next.amount, next.description, next.payer, next.paid_by, next.burden_owner, next.billing_month, next.payment_due_date, next.cycle_month, next.card_id, next.category, next.note, id]
+    `UPDATE expenses SET date = ?, amount = ?, description = ?, payer = ?, paid_by = ?, burden_owner = ?, billing_month = ?, payment_due_date = ?, cycle_month = ?, card_id = ?, category = ?, note = ?, payment_method = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [next.date, next.amount, next.description, next.payer, next.paid_by, next.burden_owner, next.billing_month, next.payment_due_date, next.cycle_month, next.card_id, next.category, next.note, next.payment_method, id]
   );
   const after = await selectOne<ExpenseRow>(c.env.DB, `SELECT * FROM expenses WHERE id = ?`, [id]);
   await logUndo(c.env.DB, 'update', id, before, after);
@@ -544,8 +547,8 @@ app.post('/undo-latest', async (c) => {
   } else if (latest.operation === 'update' && before) {
     await exec(
       c.env.DB,
-      `UPDATE expenses SET date = ?, amount = ?, description = ?, payer = ?, paid_by = ?, burden_owner = ?, billing_month = ?, payment_due_date = ?, cycle_month = ?, card_id = ?, category = ?, note = ?, archived_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [before.date, before.amount, before.description, before.payer, before.paid_by, before.burden_owner, before.billing_month, before.payment_due_date, before.cycle_month, before.card_id, before.category, before.note, before.archived_at ?? null, id]
+      `UPDATE expenses SET date = ?, amount = ?, description = ?, payer = ?, paid_by = ?, burden_owner = ?, billing_month = ?, payment_due_date = ?, cycle_month = ?, card_id = ?, category = ?, note = ?, payment_method = ?, archived_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [before.date, before.amount, before.description, before.payer, before.paid_by, before.burden_owner, before.billing_month, before.payment_due_date, before.cycle_month, before.card_id, before.category, before.note, before.payment_method ?? null, before.archived_at ?? null, id]
     );
   } else if (latest.operation === 'delete' && before) {
     await exec(c.env.DB, `UPDATE expenses SET archived_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);

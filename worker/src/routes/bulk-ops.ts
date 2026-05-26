@@ -22,15 +22,15 @@ const ENTITIES: Record<string, EntityConfig> = {
   expenses: {
     table: 'expenses', label: 'Expenses', idColumn: 'id', softDeleteColumn: 'archived_at', updatedAt: true,
     defaultSort: 'date', allowedSort: ['date','amount','billing_month','cycle_month','payment_due_date','description','id'],
-    allowedUpdate: ['date','amount','description','payer','paid_by','burden_owner','billing_month','cycle_month','payment_due_date','card_id','category','note'],
+    allowedUpdate: ['date','amount','description','payer','paid_by','burden_owner','billing_month','cycle_month','payment_due_date','payment_method','card_id','category','note'],
     monthColumn: 'COALESCE(e.cycle_month, e.billing_month)', sourceFilter: true,
-    selectSql: `SELECT e.id, e.date, e.amount, e.description, e.payer, e.paid_by, e.burden_owner, e.billing_month, e.cycle_month, e.payment_due_date, e.card_id, c.name AS card_name, e.category, e.note, e.archived_at FROM expenses e LEFT JOIN cards c ON c.id = e.card_id`,
+    selectSql: `SELECT e.id, e.date, e.amount, e.description, e.payer, e.paid_by, e.burden_owner, e.billing_month, e.cycle_month, e.payment_due_date, e.payment_method, e.card_id, c.name AS card_name, e.category, e.note, e.archived_at FROM expenses e LEFT JOIN cards c ON c.id = e.card_id`,
   },
   fixed_costs: {
     table: 'fixed_costs', label: 'Fixed costs', idColumn: 'id', softDeleteColumn: 'archived_at', updatedAt: true,
     defaultSort: 'sort_order', allowedSort: ['sort_order','name','amount','pay_day','id'],
-    allowedUpdate: ['name','amount','owner','split','pay_day','paid_by','burden_owner','account_id','category','frequency','due_date','note','sort_order'],
-    selectSql: `SELECT id, name, amount, owner, split, pay_day, paid_by, burden_owner, account_id, category, frequency, due_date, note, sort_order, archived_at FROM fixed_costs`,
+    allowedUpdate: ['name','amount','owner','split','pay_day','paid_by','burden_owner','account_id','category','frequency','due_date','active_from_month','active_to_month','note','sort_order'],
+    selectSql: `SELECT id, name, amount, owner, split, pay_day, paid_by, burden_owner, account_id, category, frequency, due_date, active_from_month, active_to_month, note, sort_order, archived_at FROM fixed_costs`,
   },
   scheduled_payments: {
     table: 'scheduled_payments', label: 'Scheduled payments', idColumn: 'id', softDeleteColumn: 'archived_at', updatedAt: true,

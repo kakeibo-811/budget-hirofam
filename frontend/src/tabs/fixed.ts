@@ -241,6 +241,8 @@ function fixedCreateForm(
     L("支払口座", "Payment account"),
     accountOptions(accounts),
   );
+  const activeFrom = input(L("開始月", "Active from month"), "month");
+  const activeTo = input(L("終了月", "Active to month"), "month");
   const category = input(t("common.category"), "text", "fixed_cost");
   const note = input(t("common.note"));
   const btn = el(
@@ -259,6 +261,8 @@ function fixedCreateForm(
           owner: getSelect(burden).value,
           split: getSelect(burden).value === "shared" ? 1 : 0,
           account_id: getSelect(account).value || null,
+          active_from_month: getInput(activeFrom).value || null,
+          active_to_month: getInput(activeTo).value || null,
           category: getInput(category).value || "fixed_cost",
           note: getInput(note).value,
         });
@@ -275,6 +279,8 @@ function fixedCreateForm(
       paidBy,
       burden,
       account,
+      activeFrom,
+      activeTo,
       category,
       note,
       btn,
@@ -406,6 +412,10 @@ async function editFixed(m: any, accounts: Account[], refresh: () => void) {
     m.account_id || "",
   );
   if (accountId === null) return;
+  const activeFrom = prompt(L("開始月 YYYY-MM（空欄可）", "Active from month YYYY-MM (optional)"), m.active_from_month || "");
+  if (activeFrom === null) return;
+  const activeTo = prompt(L("終了月 YYYY-MM（空欄可）", "Active to month YYYY-MM (optional)"), m.active_to_month || "");
+  if (activeTo === null) return;
   await api.patch(`/api/fixed-costs/${m.id}`, {
     mode: "forward",
     month: new Date().toISOString().slice(0, 7),
@@ -417,6 +427,8 @@ async function editFixed(m: any, accounts: Account[], refresh: () => void) {
     owner: burden,
     split: burden === "shared" ? 1 : 0,
     account_id: accountId || null,
+    active_from_month: activeFrom || null,
+    active_to_month: activeTo || null,
   });
   refresh();
 }

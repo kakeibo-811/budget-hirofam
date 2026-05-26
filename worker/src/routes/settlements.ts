@@ -66,8 +66,10 @@ async function settlementForMonth(db: D1Database, month: string) {
        COALESCE(s.burden_owner, f.burden_owner, f.owner, 'shared') AS burden_owner
      FROM fixed_cost_snapshots s JOIN fixed_costs f ON f.id = s.fixed_cost_id
      WHERE s.month = ? AND f.archived_at IS NULL
+       AND (f.active_from_month IS NULL OR f.active_from_month = '' OR f.active_from_month <= ?)
+       AND (f.active_to_month IS NULL OR f.active_to_month = '' OR f.active_to_month >= ?)
        AND NOT EXISTS (SELECT 1 FROM ledger_links l WHERE l.source_type = 'fixed_cost' AND l.source_id = s.id)
-     ORDER BY COALESCE(s.payment_due_date, printf('%s-%02d', s.month, COALESCE(f.pay_day, 1))) ASC`, [month]);
+     ORDER BY COALESCE(s.payment_due_date, printf('%s-%02d', s.month, COALESCE(f.pay_day, 1))) ASC`, [month, month, month]);
   const fixed = fixedRaw.filter((f) => !plannedMatchesExpense(f, expenses));
   const allScheduled = await selectAll<any>(db, `SELECT * FROM scheduled_payments
      WHERE archived_at IS NULL AND active = 1

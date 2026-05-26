@@ -85,7 +85,7 @@ export function renderIncomes(root: HTMLElement) {
       const addCard = el('details', { class: 'card soft-card', open: true }, [el('summary', {}, [L('収入を追加', 'Add income')])]);
       const date = el('input', { type: 'date', name: 'date', autocomplete: 'off', value: `${month}-25` }) as HTMLInputElement;
       const amount = el('input', { type: 'number', name: 'amount', inputmode: 'numeric', autocomplete: 'off', placeholder: '500000' }) as HTMLInputElement;
-      const owner = selectOwner('toshi');
+      const owner = selectOwner('lisa');
       const kind = selectKind('salary');
       const desc = el('input', { name: 'description', autocomplete: 'off', placeholder: L('本業給与、副業、臨時収入など', 'Salary, side income, temporary income') }) as HTMLInputElement;
       const note = el('input', { name: 'note', autocomplete: 'off', placeholder: L('メモ', 'Note') }) as HTMLInputElement;

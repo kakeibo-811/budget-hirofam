@@ -195,8 +195,10 @@ async function fixedOccurrences(db: D1Database, month: string): Promise<any[]> {
      LEFT JOIN accounts a ON a.id = f.account_id
      WHERE s.month = ?
        AND f.archived_at IS NULL
+       AND (f.active_from_month IS NULL OR f.active_from_month = '' OR f.active_from_month <= ?)
+       AND (f.active_to_month IS NULL OR f.active_to_month = '' OR f.active_to_month >= ?)
        AND NOT EXISTS (SELECT 1 FROM ledger_links l WHERE l.source_type = 'fixed_cost' AND l.source_id = s.id)
-     ORDER BY due ASC, s.id ASC`, [month]);
+      ORDER BY due ASC, s.id ASC`, [month, month, month]);
   if (rows.length > 0) return rows;
   // If snapshots have not been generated yet, still show the fixed master as forecast-only plan.
   return await selectAll<any>(db, `SELECT NULL AS id, f.id AS fixed_cost_id, ? AS month, f.amount, f.name, f.owner, f.split, f.pay_day, f.category, f.account_id,
@@ -207,7 +209,9 @@ async function fixedOccurrences(db: D1Database, month: string): Promise<any[]> {
      FROM fixed_costs f
      LEFT JOIN accounts a ON a.id = f.account_id
      WHERE f.archived_at IS NULL
-     ORDER BY due ASC, f.id ASC`, [month, month]);
+       AND (f.active_from_month IS NULL OR f.active_from_month = '' OR f.active_from_month <= ?)
+       AND (f.active_to_month IS NULL OR f.active_to_month = '' OR f.active_to_month >= ?)
+      ORDER BY due ASC, f.id ASC`, [month, month, month, month]);
 }
 
 async function latestBalances(db: D1Database) {
