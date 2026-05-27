@@ -40,7 +40,7 @@ export function renderAnalytics(root: HTMLElement) {
       ]));
       content.appendChild(visualGraphCard(dashboards));
       content.appendChild(trendCard(dashboards));
-      content.appendChild(cardAnalysisCard(dashboards));
+      content.appendChild(cardAnalysisCardV2(dashboards));
       content.appendChild(judgementCard(dashboards));
       content.appendChild(cashflowCard(dash));
       content.appendChild(topExpensesCard(dash));
@@ -238,6 +238,140 @@ function cardAnalysisCard(items: Dash[]): HTMLElement {
   wrap.appendChild(table);
   card.appendChild(wrap);
   return card;
+}
+
+function cardAnalysisCardV2(items: Dash[]): HTMLElement {
+  type CardDetail = {
+    total: number;
+    husband: number;
+    wife: number;
+    shared: number;
+    monthly: Map<string, number>;
+    details: any[];
+  };
+  const cardMap = new Map<string, CardDetail>();
+  for (const d of items) {
+    for (const row of d.evidence || []) {
+      if (!row.card_id && !row.card_name) continue;
+      const name = String(row.card_name || `Card ${row.card_id || ''}`).trim();
+      if (!name) continue;
+      const amount = Number(row.amount || 0);
+      const burden = String(row.burden_owner || row.payer || '').toLowerCase();
+      const current = cardMap.get(name) || { total: 0, husband: 0, wife: 0, shared: 0, monthly: new Map<string, number>(), details: [] };
+      current.total += amount;
+      if (burden === 'toshi' || burden === 'husband') current.husband += amount;
+      else if (burden === 'lisa' || burden === 'wife') current.wife += amount;
+      else if (burden === 'shared' || burden === 'split') current.shared += amount;
+      current.monthly.set(d.month, Number(current.monthly.get(d.month) || 0) + amount);
+      current.details.push({ ...row, month: d.month, burden });
+      cardMap.set(name, current);
+    }
+  }
+  const rows = Array.from(cardMap.entries())
+    .map(([name, v]) => ({ name, total: v.total, husband: v.husband, wife: v.wife, shared: v.shared, monthly: v.monthly, details: v.details }))
+    .sort((a, b) => b.total - a.total);
+  const card = el('div', { class: 'card' }, [
+    el('div', { class: 'section-head' }, [
+      el('div', {}, [
+        el('h3', {}, [L('カード別支払い分析', 'Card payment analysis')]),
+        el('p', { class: 'muted' }, [L('カード別の合計額、夫負担分、妻負担分、折半分を確認できます。詳細は必要なカードだけ開けます。', 'Review card totals, husband burden, wife burden, and shared split amounts. Open details only when needed.')]),
+      ]),
+    ]),
+  ]);
+  if (!rows.length) {
+    card.appendChild(el('div', { class: 'muted' }, [L('カード明細がありません', 'No card expenses')]));
+    return card;
+  }
+
+  const months = items.map((d) => d.month);
+  const latestMonth = months[months.length - 1];
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  const summary = el('div', { class: 'trend-bars' });
+  for (const r of rows.slice(0, 8)) {
+    summary.appendChild(el('div', { class: 'trend-row' }, [
+      el('div', { class: 'trend-month' }, [r.name]),
+      bar(L('期間合計', 'Range total'), r.total, max),
+      bar(L('当月', 'Current'), Number(r.monthly.get(latestMonth) || 0), max),
+    ]));
+  }
+  card.appendChild(summary);
+  card.appendChild(cardBurdenSummary(rows));
+  card.appendChild(cardBurdenDetails(rows));
+
+  const topCards = rows.slice(0, 6);
+  const wrap = el('div', { class: 'table-wrap' });
+  const table = el('table', { class: 'data compact-table' });
+  table.innerHTML = `<thead><tr><th>${L('月', 'Month')}</th>${topCards.map((r) => `<th class="num">${r.name}</th>`).join('')}<th class="num">${L('カード合計', 'Card total')}</th></tr></thead>`;
+  const tb = el('tbody');
+  for (const m of months) {
+    const monthTotal = rows.reduce((a, r) => a + Number(r.monthly.get(m) || 0), 0);
+    tb.appendChild(el('tr', {}, [
+      el('td', {}, [m]),
+      ...topCards.map((r) => el('td', { class: 'num' }, [formatYen(r.monthly.get(m) || 0)])),
+      el('td', { class: 'num' }, [formatYen(monthTotal)]),
+    ]));
+  }
+  table.appendChild(tb);
+  wrap.appendChild(table);
+  card.appendChild(wrap);
+  return card;
+}
+
+function cardBurdenSummary(rows: Array<{ name: string; total: number; husband: number; wife: number; shared: number }>): HTMLElement {
+  const wrap = el('div', { class: 'table-wrap' });
+  const table = el('table', { class: 'data compact-table' });
+  table.innerHTML = `<thead><tr><th>${L('カード', 'Card')}</th><th class="num">${L('合計額', 'Total')}</th><th class="num">${L('夫負担分', 'Husband burden')}</th><th class="num">${L('妻負担分', 'Wife burden')}</th><th class="num">${L('折半分', 'Shared split')}</th></tr></thead>`;
+  const tb = el('tbody');
+  for (const r of rows) {
+    tb.appendChild(el('tr', {}, [
+      el('td', {}, [r.name]),
+      el('td', { class: 'num' }, [formatYen(r.total)]),
+      el('td', { class: 'num' }, [formatYen(r.husband)]),
+      el('td', { class: 'num' }, [formatYen(r.wife)]),
+      el('td', { class: 'num' }, [formatYen(r.shared)]),
+    ]));
+  }
+  table.appendChild(tb);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+function cardBurdenDetails(rows: Array<{ name: string; details: any[] }>): HTMLElement {
+  const details = el('details', { class: 'card soft-card transfer-breakdown-card', open: false }, [
+    el('summary', {}, [L('カード別の詳細明細を表示', 'Show card detail lines')]),
+  ]);
+  details.appendChild(el('p', { class: 'muted' }, [L('情報量が多いので初期状態では非表示です。カードごとの内訳確認が必要な時だけ開いてください。', 'Hidden by default to keep the screen readable. Open this only when you need per-card evidence.')]));
+  for (const r of rows) {
+    const section = el('details', { class: 'soft-card', open: false }, [
+      el('summary', {}, [r.name]),
+    ]);
+    const wrap = el('div', { class: 'table-wrap' });
+    const table = el('table', { class: 'data compact-table' });
+    table.innerHTML = `<thead><tr><th>${L('月', 'Month')}</th><th>${t('common.date')}</th><th>${t('common.description')}</th><th>${L('負担', 'Burden')}</th><th class="num">${t('common.amount')}</th></tr></thead>`;
+    const tb = el('tbody');
+    for (const d of r.details.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))) {
+      tb.appendChild(el('tr', {}, [
+        el('td', {}, [d.month || '']),
+        el('td', {}, [d.payment_due_date || d.date || '']),
+        el('td', {}, [d.description || '']),
+        el('td', {}, [burdenLabel(d.burden || d.burden_owner || d.payer)]),
+        el('td', { class: 'num' }, [formatYen(d.amount || 0)]),
+      ]));
+    }
+    table.appendChild(tb);
+    wrap.appendChild(table);
+    section.appendChild(wrap);
+    details.appendChild(section);
+  }
+  return details;
+}
+
+function burdenLabel(v: any): string {
+  const s = String(v || '').toLowerCase();
+  if (s === 'toshi' || s === 'husband') return L('夫負担', 'Husband');
+  if (s === 'lisa' || s === 'wife') return L('妻負担', 'Wife');
+  if (s === 'shared' || s === 'split') return L('折半', 'Shared');
+  return L('その他', 'Other');
 }
 
 function judgementCard(items: Dash[]): HTMLElement {
