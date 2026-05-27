@@ -307,15 +307,9 @@ function withPaymentDate(row: ExpenseRow): ExpenseRow {
 
 app.get('/', async (c) => {
   const { month, payer, card_id, limit = '500', order = 'desc', sort = 'date' } = c.req.query();
-  const basis = String(c.req.query('basis') || 'billing');
   const where: string[] = ['e.archived_at IS NULL'];
   const params: any[] = [];
-  if (month) {
-    if (basis === 'payment_due') where.push("substr(COALESCE(e.payment_due_date, e.date), 1, 7) = ?");
-    else if (basis === 'cycle') where.push('COALESCE(e.cycle_month, e.billing_month) = ?');
-    else where.push('e.billing_month = ?');
-    params.push(month);
-  }
+  if (month) { where.push('COALESCE(e.cycle_month, e.billing_month) = ?'); params.push(month); }
   if (payer) { where.push('e.payer = ?'); params.push(payer); }
   if (card_id) { where.push('e.card_id = ?'); params.push(Number(card_id)); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -337,7 +331,7 @@ app.get('/', async (c) => {
 app.get('/billing-rules', async (c) => {
   const cards = await getCards(c.env.DB);
   return c.json({
-    definition: 'Budget reporting is based on billing_month. payment_due_date is used for cashflow timing only.',
+    definition: 'For ordinary card CSV, billing_month is the payment month. For kakeibo_all canonical imports, billing_month is the salary-cycle month: day 25 through day 24 of next month.',
     items: cards.map((card) => ({
       ...card,
       example: {
@@ -372,7 +366,7 @@ app.post('/import/commit', async (c) => {
   const source = String(b.source || 'csv').trim() || 'csv';
   const sourceFile = String(b.source_file || '').trim() || null;
   const mode = b.mode === 'replace_imported' ? 'replace_imported' : 'append';
-  const distinctMonths = Array.from(new Set(rows.map((r) => r.billing_month).filter(Boolean)));
+  const distinctMonths = Array.from(new Set(rows.map((r) => r.cycle_month || r.billing_month).filter(Boolean)));
   const targetMonth = b.target_month || (distinctMonths.length === 1 ? distinctMonths[0] : null);
   const warningCount = rows.filter((r) => r.warnings?.length || r.amount === null).length;
 
@@ -411,7 +405,7 @@ app.post('/import/commit', async (c) => {
     await c.env.DB.prepare(
       `INSERT INTO expense_import_keys (import_key, source, expense_id, import_batch_id, source_file, target_month)
        VALUES (?, ?, ?, ?, ?, ?)`
-    ).bind(r.import_key, source, expenseId, batchId, sourceFile, r.billing_month).run();
+    ).bind(r.import_key, source, expenseId, batchId, sourceFile, r.cycle_month || r.billing_month).run();
     inserted++;
     details.push({ line: r.line, status: 'inserted', expense_id: expenseId, warnings: r.warnings?.filter((x) => x.startsWith('WARN:')) || [] });
   }
@@ -439,13 +433,7 @@ app.get('/import/batches', async (c) => {
 app.get('/export.csv', async (c) => {
   const month = c.req.query('month');
   const lang = c.req.query('lang') || 'ja';
-  const basis = String(c.req.query('basis') || 'billing');
-  const monthWhere = basis === 'payment_due'
-    ? "substr(COALESCE(e.payment_due_date, e.date), 1, 7) = ?"
-    : basis === 'cycle'
-      ? 'COALESCE(e.cycle_month, e.billing_month) = ?'
-      : 'e.billing_month = ?';
-  const where = month ? `WHERE e.archived_at IS NULL AND ${monthWhere}` : 'WHERE e.archived_at IS NULL';
+  const where = month ? 'WHERE e.archived_at IS NULL AND COALESCE(e.cycle_month, e.billing_month) = ?' : 'WHERE e.archived_at IS NULL';
   const params = month ? [month] : [];
   const rows = await selectAll<ExpenseRow>(
     c.env.DB,

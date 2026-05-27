@@ -284,7 +284,7 @@ app.get('/dashboard/:month', async (c) => {
 
   const rows = await selectAll<any>(c.env.DB, `SELECT e.*, c.name AS card_name, c.owner AS card_owner, c.default_paid_by AS card_default_paid_by, c.default_burden_owner AS card_default_burden_owner
      FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
-     WHERE e.archived_at IS NULL AND e.billing_month = ?
+     WHERE e.archived_at IS NULL AND COALESCE(e.cycle_month, e.billing_month) = ?
        AND LOWER(COALESCE(e.category, '')) NOT IN ('loan', 'loan_repayment')
      ORDER BY COALESCE(e.payment_due_date, e.date) ASC, e.id ASC`, [month]);
   const schedRaw = await scheduledOccurrences(c.env.DB, period, month);
@@ -438,7 +438,7 @@ app.get('/dashboard/:month', async (c) => {
     aggregation_policy: {
       actuals_override_plans: appSettings.dashboard_actuals_override_plans === 'true',
       card_fixed_split_explained: appSettings.dashboard_card_fixed_split_explained === 'true',
-      note: 'Household total = actual expenses by billing_month + remaining fixed/scheduled plans not matched to actual expenses. payment_due_date is used for cashflow timing only.',
+      note: 'Household total = actual expenses for the budget month + remaining fixed/scheduled plans not matched to actual expenses.',
     },
     household: {
       total: householdTotal,
@@ -474,14 +474,14 @@ app.get('/timeline', async (c) => {
   const { from, to } = c.req.query();
   const fromMonth = from || '2024-01';
   const toMonth = to || '2030-12';
-  const rows = await selectAll(c.env.DB, `SELECT billing_month AS month,
+  const rows = await selectAll(c.env.DB, `SELECT COALESCE(cycle_month, billing_month) AS month,
        SUM(CASE WHEN COALESCE(burden_owner, payer) = 'toshi' THEN amount ELSE 0 END) AS toshi,
        SUM(CASE WHEN COALESCE(burden_owner, payer) = 'lisa' THEN amount ELSE 0 END) AS lisa,
        SUM(CASE WHEN COALESCE(burden_owner, payer) = 'shared' THEN amount ELSE 0 END) AS shared,
        SUM(amount) AS total
      FROM expenses
-     WHERE archived_at IS NULL AND billing_month >= ? AND billing_month <= ?
-     GROUP BY billing_month ORDER BY month ASC`, [fromMonth, toMonth]);
+     WHERE archived_at IS NULL AND COALESCE(cycle_month, billing_month) >= ? AND COALESCE(cycle_month, billing_month) <= ?
+     GROUP BY COALESCE(cycle_month, billing_month) ORDER BY month ASC`, [fromMonth, toMonth]);
   return c.json({ items: rows });
 });
 

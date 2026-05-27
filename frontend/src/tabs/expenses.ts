@@ -106,7 +106,7 @@ function renderPreview(rows: ExpenseImportRow[], warnings: string[], onRowsChang
   const table = el('table', { class: 'data compact-table' });
   table.innerHTML = `<thead><tr>
     <th>${L('行', 'Line')}</th><th>${t('common.date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th>
-    <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('支払サイクル月', 'Payment cycle month')}</th><th>${L('予算月/請求月', 'Budget / billing month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${L('警告', 'Warnings')}</th>
+    <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('家計月', 'Budget month')}</th><th>${t('common.billing_month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${L('警告', 'Warnings')}</th>
   </tr></thead>`;
   const tbody = el('tbody');
   for (const r of rows) {
@@ -168,9 +168,9 @@ function expenseForm(args: {
   form.appendChild(field(L('負担者', 'Burden owner'), burden));
   form.appendChild(field(L('実支払者', 'Paid by'), paidBy));
   form.appendChild(field(L('支払い手段', 'Payment method'), paymentMethod));
-  form.appendChild(field(L('予算月/請求月', 'Budget / billing month'), billingMonth));
+  form.appendChild(field(t('common.billing_month'), billingMonth));
   form.appendChild(field(L('支払予定日', 'Payment date'), paymentDueDate));
-  form.appendChild(field(L('支払サイクル月（参考）', 'Payment cycle month (reference)'), cycleMonth));
+  form.appendChild(field(L('家計月', 'Budget month'), cycleMonth));
   form.appendChild(field(t('common.card'), card));
   form.appendChild(field(t('common.category'), category));
   form.appendChild(field(t('common.note'), note));
@@ -204,8 +204,8 @@ export function renderExpenses(root: HTMLElement) {
   const status = el('div');
   root.appendChild(picker.element());
   root.appendChild(el('div', { class: 'banner banner-info' }, [
-    L('予算・概要・精算は「予算月/請求月」を基準に集計します。明細タブだけ、探しやすいように支払予定月や支払サイクル月でも表示できます。',
-      'Budget, overview, and settlement are based on budget / billing month. The expense tab can also display by payment month or payment cycle month for lookup.')
+    L('表示月は「家計月」です。毎月25日〜翌月24日を当月として扱います。支払予定日を手動変更すると、ダッシュボード・精算・分析はその日付に基づいて再集計されます。',
+      'The selected month is the budget month: day 25 through day 24. If you edit payment date manually, dashboard, settlement and analytics recalculate from that date.')
   ]));
   root.appendChild(status);
   root.appendChild(content);
@@ -215,7 +215,6 @@ export function renderExpenses(root: HTMLElement) {
   let selectedIds = new Set<number>();
   let sortBy = 'date';
   let sortOrder: 'asc' | 'desc' = 'desc';
-  let viewBasis = localStorage.getItem('expenseViewBasis') || 'billing';
 
   function showStatus(message: string, kind: 'info' | 'warn' | 'error' = 'info') {
     clear(status);
@@ -233,27 +232,10 @@ export function renderExpenses(root: HTMLElement) {
     await reloadCards();
     try {
       const [data, rules] = await Promise.all([
-        api.get<{ items: Expense[] }>(`/api/expenses?month=${month}&basis=${viewBasis}&sort=${sortBy}&order=${sortOrder}`),
+        api.get<{ items: Expense[] }>(`/api/expenses?month=${month}&sort=${sortBy}&order=${sortOrder}`),
         api.get<{ items: any[]; definition: string }>('/api/expenses/billing-rules'),
       ]);
       clear(content);
-      const basisSelect = el('select') as HTMLSelectElement;
-      [
-        ['billing', L('予算月/請求月で表示', 'Show by budget / billing month')],
-        ['payment_due', L('支払予定月で表示', 'Show by payment month')],
-        ['cycle', L('支払サイクル月で表示', 'Show by payment cycle month')],
-      ].forEach(([v, label]) => basisSelect.appendChild(el('option', { value: v, selected: v === viewBasis ? 'selected' : null }, [label])));
-      basisSelect.addEventListener('change', async () => {
-        viewBasis = basisSelect.value;
-        localStorage.setItem('expenseViewBasis', viewBasis);
-        await load(picker.get());
-      });
-      content.appendChild(el('div', { class: 'card row-flex' }, [
-        el('label', { class: 'field-inline' }, [L('明細の表示基準 ', 'Expense view basis '), basisSelect]),
-        el('span', { class: 'muted' }, [viewBasis === 'billing'
-          ? L('集計と同じ基準です', 'Same basis as totals')
-          : L('表示だけの切替です。予算集計は予算月/請求月のままです', 'Display only. Budget totals still use billing month')]),
-      ]));
 
       const ruleCard = el('details', { class: 'collapse' }, [el('summary', {}, [L('請求月・支払日・家計月の考え方', 'Billing, payment and budget-month rules')])]);
       ruleCard.appendChild(el('p', { class: 'muted' }, [
@@ -349,7 +331,7 @@ export function renderExpenses(root: HTMLElement) {
             await load(picker.get());
           } catch (e: any) { clear(commitArea); commitArea.appendChild(el('div', { class: 'banner banner-error' }, [`${L('確定登録失敗', 'Commit failed')}: ${e.message}`])); }
         }),
-        button(L('当月CSV出力', 'Export month CSV'), () => download(`/api/expenses/export.csv?month=${month}&basis=${viewBasis}&lang=${getLocale()}`)),
+        button(L('当月CSV出力', 'Export month CSV'), () => download(`/api/expenses/export.csv?month=${month}&lang=${getLocale()}`)),
         button(L('この月の取込分を削除', 'Delete imported rows for this month'), async () => {
           const source = sourceSelect.value || 'kakeibo_all';
           if (!confirm(L(`${source} / ${month} の取込済み明細を一括削除します。実行しますか？`, `Archive imported expense rows for ${source} / ${month}?`))) return;
@@ -369,12 +351,12 @@ export function renderExpenses(root: HTMLElement) {
       const sec = el('div', { class: 'card' }, [el('h3', {}, [`${month} ${L('明細', 'Expenses')}`])]);
       selectedIds = new Set<number>();
       const sortSelect = el('select') as HTMLSelectElement;
-      [['date', L('日付', 'Date')], ['amount', L('金額', 'Amount')], ['billing_month', L('予算月/請求月', 'Budget / billing month')], ['cycle_month', L('支払サイクル月', 'Payment cycle month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['description', L('内容', 'Description')]].forEach(([v, label]) => sortSelect.appendChild(el('option', { value: v, selected: v === sortBy ? 'selected' : null }, [label])));
+      [['date', L('日付', 'Date')], ['amount', L('金額', 'Amount')], ['billing_month', L('請求月', 'Billing month')], ['cycle_month', L('家計月', 'Budget month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['description', L('内容', 'Description')]].forEach(([v, label]) => sortSelect.appendChild(el('option', { value: v, selected: v === sortBy ? 'selected' : null }, [label])));
       const orderSelect = el('select') as HTMLSelectElement;
       orderSelect.appendChild(el('option', { value: 'asc', selected: sortOrder === 'asc' ? 'selected' : null }, [L('昇順', 'Ascending')]));
       orderSelect.appendChild(el('option', { value: 'desc', selected: sortOrder === 'desc' ? 'selected' : null }, [L('降順', 'Descending')]));
       const bulkField = el('select') as HTMLSelectElement;
-      [['billing_month', L('予算月/請求月', 'Budget / billing month')], ['cycle_month', L('支払サイクル月', 'Payment cycle month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['paid_by', L('実支払者', 'Paid by')], ['burden_owner', L('負担者', 'Burden owner')], ['category', L('カテゴリ', 'Category')], ['note', L('メモ', 'Note')]].forEach(([v, label]) => bulkField.appendChild(el('option', { value: v }, [label])));
+      [['billing_month', L('請求月', 'Billing month')], ['cycle_month', L('家計月', 'Budget month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['paid_by', L('実支払者', 'Paid by')], ['burden_owner', L('負担者', 'Burden owner')], ['category', L('カテゴリ', 'Category')], ['note', L('メモ', 'Note')]].forEach(([v, label]) => bulkField.appendChild(el('option', { value: v }, [label])));
       const bulkValue = el('input', { placeholder: L('一括反映する値', 'Value to apply') }) as HTMLInputElement;
       const selectedLabel = el('span', { class: 'muted' }, [L('選択 0件', 'Selected 0')]);
       const refreshSelectedLabel = () => { selectedLabel.textContent = L(`選択 ${selectedIds.size}件`, `Selected ${selectedIds.size}`); };
@@ -412,7 +394,7 @@ export function renderExpenses(root: HTMLElement) {
       const tab = el('table', { class: 'data compact-table' });
       tab.innerHTML = `<thead><tr>
         <th><input type="checkbox" id="expense-select-all"></th><th>${t('common.date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th>
-        <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('支払方法', 'Payment method')}</th><th>${L('支払サイクル月', 'Payment cycle month')}</th><th>${L('予算月/請求月', 'Budget / billing month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${t('common.category')}</th><th>${t('common.note')}</th><th>${t('common.actions')}</th>
+        <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('家計月', 'Budget month')}</th><th>${t('common.billing_month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${t('common.category')}</th><th>${t('common.note')}</th><th>${t('common.actions')}</th>
       </tr></thead>`;
       const tbody = el('tbody');
       const selectAllBox = tab.querySelector('#expense-select-all') as HTMLInputElement | null;
@@ -421,7 +403,7 @@ export function renderExpenses(root: HTMLElement) {
         tbody.querySelectorAll<HTMLInputElement>('input[data-expense-select]').forEach((cb) => { cb.checked = selectedIds.has(Number(cb.value)); });
         refreshSelectedLabel();
       });
-      if (!data.items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '14', class: 'muted' }, [t('common.no_data')])]));
+      if (!data.items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '13', class: 'muted' }, [t('common.no_data')])]));
       for (const ex of data.items) {
         const actionsCell = el('td', { class: 'table-actions sticky-actions' });
         actionsCell.appendChild(button(t('common.edit'), () => {
