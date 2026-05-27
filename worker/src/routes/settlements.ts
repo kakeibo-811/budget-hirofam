@@ -57,7 +57,7 @@ function scheduledOccursInMonth(sp: any, month: string): boolean {
 
 async function settlementForMonth(db: D1Database, month: string) {
   const expenses = await selectAll<any>(db, `SELECT e.*, c.name AS card_name FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
-     WHERE e.archived_at IS NULL AND COALESCE(e.cycle_month, e.billing_month) = ?
+     WHERE e.archived_at IS NULL AND e.billing_month = ?
        AND LOWER(COALESCE(e.category, '')) NOT IN ('loan', 'loan_repayment')
        AND NOT EXISTS (SELECT 1 FROM ledger_links l WHERE l.expense_id = e.id AND l.source_type IN ('loan_repayment','transfer'))
      ORDER BY COALESCE(e.payment_due_date, e.date) ASC, e.id ASC`, [month]);

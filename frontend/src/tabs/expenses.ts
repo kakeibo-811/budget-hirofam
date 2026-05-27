@@ -106,7 +106,7 @@ function renderPreview(rows: ExpenseImportRow[], warnings: string[], onRowsChang
   const table = el('table', { class: 'data compact-table' });
   table.innerHTML = `<thead><tr>
     <th>${L('行', 'Line')}</th><th>${t('common.date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th>
-    <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('家計月', 'Budget month')}</th><th>${t('common.billing_month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${L('警告', 'Warnings')}</th>
+    <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('支払サイクル月', 'Payment cycle month')}</th><th>${L('予算月/請求月', 'Budget / billing month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${L('警告', 'Warnings')}</th>
   </tr></thead>`;
   const tbody = el('tbody');
   for (const r of rows) {
@@ -168,9 +168,9 @@ function expenseForm(args: {
   form.appendChild(field(L('負担者', 'Burden owner'), burden));
   form.appendChild(field(L('実支払者', 'Paid by'), paidBy));
   form.appendChild(field(L('支払い手段', 'Payment method'), paymentMethod));
-  form.appendChild(field(t('common.billing_month'), billingMonth));
+  form.appendChild(field(L('予算月/請求月', 'Budget / billing month'), billingMonth));
   form.appendChild(field(L('支払予定日', 'Payment date'), paymentDueDate));
-  form.appendChild(field(L('家計月', 'Budget month'), cycleMonth));
+  form.appendChild(field(L('支払サイクル月（参考）', 'Payment cycle month (reference)'), cycleMonth));
   form.appendChild(field(t('common.card'), card));
   form.appendChild(field(t('common.category'), category));
   form.appendChild(field(t('common.note'), note));
@@ -351,12 +351,12 @@ export function renderExpenses(root: HTMLElement) {
       const sec = el('div', { class: 'card' }, [el('h3', {}, [`${month} ${L('明細', 'Expenses')}`])]);
       selectedIds = new Set<number>();
       const sortSelect = el('select') as HTMLSelectElement;
-      [['date', L('日付', 'Date')], ['amount', L('金額', 'Amount')], ['billing_month', L('請求月', 'Billing month')], ['cycle_month', L('家計月', 'Budget month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['description', L('内容', 'Description')]].forEach(([v, label]) => sortSelect.appendChild(el('option', { value: v, selected: v === sortBy ? 'selected' : null }, [label])));
+      [['date', L('日付', 'Date')], ['amount', L('金額', 'Amount')], ['billing_month', L('予算月/請求月', 'Budget / billing month')], ['cycle_month', L('支払サイクル月', 'Payment cycle month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['description', L('内容', 'Description')]].forEach(([v, label]) => sortSelect.appendChild(el('option', { value: v, selected: v === sortBy ? 'selected' : null }, [label])));
       const orderSelect = el('select') as HTMLSelectElement;
       orderSelect.appendChild(el('option', { value: 'asc', selected: sortOrder === 'asc' ? 'selected' : null }, [L('昇順', 'Ascending')]));
       orderSelect.appendChild(el('option', { value: 'desc', selected: sortOrder === 'desc' ? 'selected' : null }, [L('降順', 'Descending')]));
       const bulkField = el('select') as HTMLSelectElement;
-      [['billing_month', L('請求月', 'Billing month')], ['cycle_month', L('家計月', 'Budget month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['paid_by', L('実支払者', 'Paid by')], ['burden_owner', L('負担者', 'Burden owner')], ['category', L('カテゴリ', 'Category')], ['note', L('メモ', 'Note')]].forEach(([v, label]) => bulkField.appendChild(el('option', { value: v }, [label])));
+      [['billing_month', L('予算月/請求月', 'Budget / billing month')], ['cycle_month', L('支払サイクル月', 'Payment cycle month')], ['payment_due_date', L('支払予定日', 'Payment date')], ['paid_by', L('実支払者', 'Paid by')], ['burden_owner', L('負担者', 'Burden owner')], ['category', L('カテゴリ', 'Category')], ['note', L('メモ', 'Note')]].forEach(([v, label]) => bulkField.appendChild(el('option', { value: v }, [label])));
       const bulkValue = el('input', { placeholder: L('一括反映する値', 'Value to apply') }) as HTMLInputElement;
       const selectedLabel = el('span', { class: 'muted' }, [L('選択 0件', 'Selected 0')]);
       const refreshSelectedLabel = () => { selectedLabel.textContent = L(`選択 ${selectedIds.size}件`, `Selected ${selectedIds.size}`); };
@@ -394,7 +394,7 @@ export function renderExpenses(root: HTMLElement) {
       const tab = el('table', { class: 'data compact-table' });
       tab.innerHTML = `<thead><tr>
         <th><input type="checkbox" id="expense-select-all"></th><th>${t('common.date')}</th><th class="num">${t('common.amount')}</th><th>${t('common.description')}</th>
-        <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('家計月', 'Budget month')}</th><th>${t('common.billing_month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${t('common.category')}</th><th>${t('common.note')}</th><th>${t('common.actions')}</th>
+        <th>${L('負担者', 'Burden')}</th><th>${L('実支払者', 'Paid by')}</th><th>${L('支払方法', 'Payment method')}</th><th>${L('支払サイクル月', 'Payment cycle month')}</th><th>${L('予算月/請求月', 'Budget / billing month')}</th><th>${L('支払予定日', 'Payment date')}</th><th>${t('common.card')}</th><th>${t('common.category')}</th><th>${t('common.note')}</th><th>${t('common.actions')}</th>
       </tr></thead>`;
       const tbody = el('tbody');
       const selectAllBox = tab.querySelector('#expense-select-all') as HTMLInputElement | null;
@@ -403,7 +403,7 @@ export function renderExpenses(root: HTMLElement) {
         tbody.querySelectorAll<HTMLInputElement>('input[data-expense-select]').forEach((cb) => { cb.checked = selectedIds.has(Number(cb.value)); });
         refreshSelectedLabel();
       });
-      if (!data.items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '13', class: 'muted' }, [t('common.no_data')])]));
+      if (!data.items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '14', class: 'muted' }, [t('common.no_data')])]));
       for (const ex of data.items) {
         const actionsCell = el('td', { class: 'table-actions sticky-actions' });
         actionsCell.appendChild(button(t('common.edit'), () => {
