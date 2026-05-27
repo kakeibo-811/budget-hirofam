@@ -40,6 +40,7 @@ export function renderAnalytics(root: HTMLElement) {
       ]));
       content.appendChild(visualGraphCard(dashboards));
       content.appendChild(trendCard(dashboards));
+      content.appendChild(cardAnalysisCard(dashboards));
       content.appendChild(judgementCard(dashboards));
       content.appendChild(cashflowCard(dash));
       content.appendChild(topExpensesCard(dash));
@@ -175,6 +176,68 @@ function bar(label: string, amount: number, max: number): HTMLElement {
     el('span', { style: `width:${pct}%` }, []),
     el('em', {}, [`${label} ${formatYen(amount)}`]),
   ]);
+}
+
+function cardAnalysisCard(items: Dash[]): HTMLElement {
+  const cardMap = new Map<string, { total: number; monthly: Map<string, number> }>();
+  for (const d of items) {
+    for (const row of d.evidence || []) {
+      if (!row.card_id && !row.card_name) continue;
+      const name = String(row.card_name || `Card ${row.card_id || ''}`).trim();
+      if (!name) continue;
+      const amount = Number(row.amount || 0);
+      const current = cardMap.get(name) || { total: 0, monthly: new Map<string, number>() };
+      current.total += amount;
+      current.monthly.set(d.month, Number(current.monthly.get(d.month) || 0) + amount);
+      cardMap.set(name, current);
+    }
+  }
+  const rows = Array.from(cardMap.entries())
+    .map(([name, v]) => ({ name, total: v.total, monthly: v.monthly }))
+    .sort((a, b) => b.total - a.total);
+  const card = el('div', { class: 'card' }, [
+    el('div', { class: 'section-head' }, [
+      el('div', {}, [
+        el('h3', {}, [L('カード別支払い分析', 'Card payment analysis')]),
+        el('p', { class: 'muted' }, [L('カード明細の合計額と月間推移を確認します。', 'Review card totals and monthly trends.')]),
+      ]),
+    ]),
+  ]);
+  if (!rows.length) {
+    card.appendChild(el('div', { class: 'muted' }, [L('カード明細がありません', 'No card expenses')]));
+    return card;
+  }
+
+  const months = items.map((d) => d.month);
+  const latestMonth = months[months.length - 1];
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  const summary = el('div', { class: 'trend-bars' });
+  for (const r of rows.slice(0, 8)) {
+    summary.appendChild(el('div', { class: 'trend-row' }, [
+      el('div', { class: 'trend-month' }, [r.name]),
+      bar(L('期間合計', 'Range total'), r.total, max),
+      bar(L('当月', 'Current'), Number(r.monthly.get(latestMonth) || 0), max),
+    ]));
+  }
+  card.appendChild(summary);
+
+  const topCards = rows.slice(0, 6);
+  const wrap = el('div', { class: 'table-wrap' });
+  const table = el('table', { class: 'data compact-table' });
+  table.innerHTML = `<thead><tr><th>${L('月', 'Month')}</th>${topCards.map((r) => `<th class="num">${r.name}</th>`).join('')}<th class="num">${L('カード合計', 'Card total')}</th></tr></thead>`;
+  const tb = el('tbody');
+  for (const m of months) {
+    const monthTotal = rows.reduce((a, r) => a + Number(r.monthly.get(m) || 0), 0);
+    tb.appendChild(el('tr', {}, [
+      el('td', {}, [m]),
+      ...topCards.map((r) => el('td', { class: 'num' }, [formatYen(r.monthly.get(m) || 0)])),
+      el('td', { class: 'num' }, [formatYen(monthTotal)]),
+    ]));
+  }
+  table.appendChild(tb);
+  wrap.appendChild(table);
+  card.appendChild(wrap);
+  return card;
 }
 
 function judgementCard(items: Dash[]): HTMLElement {
