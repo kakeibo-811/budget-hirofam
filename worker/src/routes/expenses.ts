@@ -307,9 +307,15 @@ function withPaymentDate(row: ExpenseRow): ExpenseRow {
 
 app.get('/', async (c) => {
   const { month, payer, card_id, limit = '500', order = 'desc', sort = 'date' } = c.req.query();
+  const basis = String(c.req.query('basis') || 'billing');
   const where: string[] = ['e.archived_at IS NULL'];
   const params: any[] = [];
-  if (month) { where.push('e.billing_month = ?'); params.push(month); }
+  if (month) {
+    if (basis === 'payment_due') where.push("substr(COALESCE(e.payment_due_date, e.date), 1, 7) = ?");
+    else if (basis === 'cycle') where.push('COALESCE(e.cycle_month, e.billing_month) = ?');
+    else where.push('e.billing_month = ?');
+    params.push(month);
+  }
   if (payer) { where.push('e.payer = ?'); params.push(payer); }
   if (card_id) { where.push('e.card_id = ?'); params.push(Number(card_id)); }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -433,7 +439,13 @@ app.get('/import/batches', async (c) => {
 app.get('/export.csv', async (c) => {
   const month = c.req.query('month');
   const lang = c.req.query('lang') || 'ja';
-  const where = month ? 'WHERE e.archived_at IS NULL AND e.billing_month = ?' : 'WHERE e.archived_at IS NULL';
+  const basis = String(c.req.query('basis') || 'billing');
+  const monthWhere = basis === 'payment_due'
+    ? "substr(COALESCE(e.payment_due_date, e.date), 1, 7) = ?"
+    : basis === 'cycle'
+      ? 'COALESCE(e.cycle_month, e.billing_month) = ?'
+      : 'e.billing_month = ?';
+  const where = month ? `WHERE e.archived_at IS NULL AND ${monthWhere}` : 'WHERE e.archived_at IS NULL';
   const params = month ? [month] : [];
   const rows = await selectAll<ExpenseRow>(
     c.env.DB,

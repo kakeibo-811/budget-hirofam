@@ -204,8 +204,8 @@ export function renderExpenses(root: HTMLElement) {
   const status = el('div');
   root.appendChild(picker.element());
   root.appendChild(el('div', { class: 'banner banner-info' }, [
-    L('表示月は「家計月」です。毎月25日〜翌月24日を当月として扱います。支払予定日を手動変更すると、ダッシュボード・精算・分析はその日付に基づいて再集計されます。',
-      'The selected month is the budget month: day 25 through day 24. If you edit payment date manually, dashboard, settlement and analytics recalculate from that date.')
+    L('予算・概要・精算は「予算月/請求月」を基準に集計します。明細タブだけ、探しやすいように支払予定月や支払サイクル月でも表示できます。',
+      'Budget, overview, and settlement are based on budget / billing month. The expense tab can also display by payment month or payment cycle month for lookup.')
   ]));
   root.appendChild(status);
   root.appendChild(content);
@@ -215,6 +215,7 @@ export function renderExpenses(root: HTMLElement) {
   let selectedIds = new Set<number>();
   let sortBy = 'date';
   let sortOrder: 'asc' | 'desc' = 'desc';
+  let viewBasis = localStorage.getItem('expenseViewBasis') || 'billing';
 
   function showStatus(message: string, kind: 'info' | 'warn' | 'error' = 'info') {
     clear(status);
@@ -232,10 +233,27 @@ export function renderExpenses(root: HTMLElement) {
     await reloadCards();
     try {
       const [data, rules] = await Promise.all([
-        api.get<{ items: Expense[] }>(`/api/expenses?month=${month}&sort=${sortBy}&order=${sortOrder}`),
+        api.get<{ items: Expense[] }>(`/api/expenses?month=${month}&basis=${viewBasis}&sort=${sortBy}&order=${sortOrder}`),
         api.get<{ items: any[]; definition: string }>('/api/expenses/billing-rules'),
       ]);
       clear(content);
+      const basisSelect = el('select') as HTMLSelectElement;
+      [
+        ['billing', L('予算月/請求月で表示', 'Show by budget / billing month')],
+        ['payment_due', L('支払予定月で表示', 'Show by payment month')],
+        ['cycle', L('支払サイクル月で表示', 'Show by payment cycle month')],
+      ].forEach(([v, label]) => basisSelect.appendChild(el('option', { value: v, selected: v === viewBasis ? 'selected' : null }, [label])));
+      basisSelect.addEventListener('change', async () => {
+        viewBasis = basisSelect.value;
+        localStorage.setItem('expenseViewBasis', viewBasis);
+        await load(picker.get());
+      });
+      content.appendChild(el('div', { class: 'card row-flex' }, [
+        el('label', { class: 'field-inline' }, [L('明細の表示基準 ', 'Expense view basis '), basisSelect]),
+        el('span', { class: 'muted' }, [viewBasis === 'billing'
+          ? L('集計と同じ基準です', 'Same basis as totals')
+          : L('表示だけの切替です。予算集計は予算月/請求月のままです', 'Display only. Budget totals still use billing month')]),
+      ]));
 
       const ruleCard = el('details', { class: 'collapse' }, [el('summary', {}, [L('請求月・支払日・家計月の考え方', 'Billing, payment and budget-month rules')])]);
       ruleCard.appendChild(el('p', { class: 'muted' }, [
@@ -331,7 +349,7 @@ export function renderExpenses(root: HTMLElement) {
             await load(picker.get());
           } catch (e: any) { clear(commitArea); commitArea.appendChild(el('div', { class: 'banner banner-error' }, [`${L('確定登録失敗', 'Commit failed')}: ${e.message}`])); }
         }),
-        button(L('当月CSV出力', 'Export month CSV'), () => download(`/api/expenses/export.csv?month=${month}&lang=${getLocale()}`)),
+        button(L('当月CSV出力', 'Export month CSV'), () => download(`/api/expenses/export.csv?month=${month}&basis=${viewBasis}&lang=${getLocale()}`)),
         button(L('この月の取込分を削除', 'Delete imported rows for this month'), async () => {
           const source = sourceSelect.value || 'kakeibo_all';
           if (!confirm(L(`${source} / ${month} の取込済み明細を一括削除します。実行しますか？`, `Archive imported expense rows for ${source} / ${month}?`))) return;
