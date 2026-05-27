@@ -39,8 +39,9 @@ async function ensureIncomeSchema(db: D1Database) {
 }
 
 
-function normalizeKind(v: any): 'salary' | 'bonus' | 'other' {
+function normalizeKind(v: any): 'salary' | 'bonus' | 'other' | 'household_contribution' {
   const s = String(v || '').toLowerCase();
+  if (s === 'household_contribution') return 'household_contribution';
   return s === 'salary' || s === 'bonus' ? s : 'other';
 }
 function normalizeOwner(v: any): 'toshi' | 'lisa' {

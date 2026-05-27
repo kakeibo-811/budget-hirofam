@@ -5,9 +5,11 @@ import { MonthPicker } from '../components/month-picker';
 type DashboardData = {
   month: string;
   period: { start: string; end: string };
-  income: { total: number; toshi: number; lisa: number };
+  income: { total: number; toshi: number; lisa: number; household_contribution?: number };
   household: {
     total: number;
+    gross_total?: number;
+    household_contribution?: number;
     husband_only: number;
     split_total: number;
     fixed_total: number;
@@ -27,6 +29,8 @@ type DashboardData = {
       split_paid_by_husband: number;
       fixed_or_scheduled_paid_by_husband: number;
       credit_husband_paid_by_wife: number;
+      household_contribution_received_by_husband?: number;
+      household_contribution_received_by_wife?: number;
     };
   };
   cashflow?: any;
@@ -79,8 +83,8 @@ function renderOverview(root: HTMLElement, data: DashboardData) {
 
   root.appendChild(monthSummary(data, householdBalance));
   root.appendChild(el('div', { class: 'overview-kpi-grid' }, [
-    kpiCard(L('収入合計', 'Total income'), data.income.total, L('夫婦の登録収入', 'Registered household income')),
-    kpiCard(L('家計支出', 'Household spending'), data.household.total, L('実績と予定を含む', 'Actuals and planned costs')),
+    kpiCard(L('収入合計', 'Total income'), data.income.total, L('夫婦の登録収入（生活費負担金は含めない）', 'Registered partner income, excluding household contributions')),
+    kpiCard(L('家計支出', 'Household spending'), data.household.total, L('同居家族の生活費負担金を控除後', 'After household contribution offset')),
     kpiCard(L('差引', 'Balance'), householdBalance, L('収入 - 家計支出', 'Income minus spending'), true),
     kpiCard(L('妻→夫 精算', 'Wife to Husband'), data.settlement.wife_due_to_husband, L('振込予定額', 'Transfer due')),
   ]));
@@ -148,6 +152,9 @@ function spendingCard(data: DashboardData): HTMLElement {
     [L('カード以外の実績', 'Non-card actuals'), data.household.non_card_actual_expense_total || 0, pct(data.household.non_card_actual_expense_total || 0, data.household.total)],
     [L('固定費・予定支払い', 'Fixed and scheduled'), fixedPlanned, pct(fixedPlanned, data.household.total)],
   ];
+  if (Number(data.household.household_contribution || 0) > 0) {
+    rows.push([L('控除: 同居家族の生活費負担金', 'Deduct: household contribution'), -Number(data.household.household_contribution || 0), L('夫婦の負担対象から差し引き', 'Offset from partner shared burden')]);
+  }
   return panel(L('支出内訳', 'Spending breakdown'), L('家計支出に何が入っているか', 'What makes up household spending'), rows, data.household.total);
 }
 
@@ -157,6 +164,8 @@ function settlementCard(data: DashboardData): HTMLElement {
     split_paid_by_husband: 0,
     fixed_or_scheduled_paid_by_husband: 0,
     credit_husband_paid_by_wife: 0,
+    household_contribution_received_by_husband: 0,
+    household_contribution_received_by_wife: 0,
   };
   return el('section', { class: 'overview-panel overview-settlement' }, [
     el('div', { class: 'overview-card-head' }, [
@@ -170,6 +179,7 @@ function settlementCard(data: DashboardData): HTMLElement {
     amountRow(L('妻個人分を夫が立替', 'Wife personal paid by husband'), wb.wife_personal_paid_by_husband),
     amountRow(L('折半分を夫が立替', 'Split share paid by husband'), wb.split_paid_by_husband),
     amountRow(L('固定費・予定支払いを夫が立替', 'Fixed/scheduled paid by husband'), wb.fixed_or_scheduled_paid_by_husband),
+    amountRow(L('控除: 同居家族の生活費負担金', 'Deduct: household contribution'), -Number(wb.household_contribution_received_by_husband || 0)),
     amountRow(L('控除: 夫のカード分を妻が支払済み', 'Deduct: husband credit paid by wife'), -wb.credit_husband_paid_by_wife),
   ]);
 }

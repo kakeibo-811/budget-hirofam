@@ -87,6 +87,10 @@ function inferBurdenOwner(row: any): Owner {
   return ownerValue(row.burden_owner || row.payer);
 }
 
+function isHouseholdContribution(row: any): boolean {
+  return String(row.kind || '').toLowerCase() === 'household_contribution';
+}
+
 function compactText(v: any): string {
   return String(v || '').toLowerCase().replace(/[\s_\-　・．\.／\/（）()「」『』【】\[\]:：,，]/g, '');
 }
@@ -254,14 +258,25 @@ app.get('/dashboard/:month', async (c) => {
   const cycleStartDay = Number(c.req.query('cycle_start_day') || configuredCycleStart || 25);
   const period = cycleRange(month, cycleStartDay);
 
-  const income = await selectOne<{ total: number; toshi: number; lisa: number }>(c.env.DB, `SELECT
-       COALESCE(SUM(amount), 0) AS total,
-       COALESCE(SUM(CASE WHEN owner = 'toshi' THEN amount ELSE 0 END), 0) AS toshi,
-       COALESCE(SUM(CASE WHEN owner = 'lisa' THEN amount ELSE 0 END), 0) AS lisa
-     FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]) || { total: 0, toshi: 0, lisa: 0 };
+  const income = { total: 0, toshi: 0, lisa: 0, household_contribution: 0 };
+  const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description, kind FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]);
+  for (const r of incomeRows) {
+    const amt = Number(r.amount || 0);
+    if (isHouseholdContribution(r)) {
+      income.household_contribution += amt;
+      continue;
+    }
+    income.total += amt;
+    if (ownerValue(r.owner) === 'toshi') income.toshi += amt;
+    if (ownerValue(r.owner) === 'lisa') income.lisa += amt;
+  }
   const recurringIncomeRows = await recurringIncomeOccurrences(c.env.DB, period, month);
   for (const r of recurringIncomeRows) {
     const amt = Number(r.amount || 0);
+    if (isHouseholdContribution(r)) {
+      income.household_contribution += amt;
+      continue;
+    }
     income.total += amt;
     if (ownerValue(r.owner) === 'toshi') income.toshi += amt;
     if (ownerValue(r.owner) === 'lisa') income.lisa += amt;
@@ -349,6 +364,31 @@ app.get('/dashboard/:month', async (c) => {
       if (burden === 'shared' || Number(fp.split || 0) === 1) { const h = half(amount); husbandDueGross += h; addHusbandCreditLine('fixed_cost', fp, h, 'credit_husband_paid_by_wife', 0.5); }
     }
   }
+  const householdContributionTotal = Math.min(Number(income.household_contribution || 0), splitTotal);
+  if (householdContributionTotal > 0) {
+    householdTotal -= householdContributionTotal;
+    splitTotal -= householdContributionTotal;
+    const contributionByOwner = recurringIncomeRows
+      .filter(isHouseholdContribution)
+      .concat(incomeRows.filter(isHouseholdContribution))
+      .reduce((acc, x) => {
+        const owner = ownerValue(x.owner);
+        acc[owner] = Number(acc[owner] || 0) + Number(x.amount || 0);
+        return acc;
+      }, {} as Record<Owner, number>);
+    const toshiCredit = Math.min(Number(contributionByOwner.toshi || 0), householdContributionTotal);
+    const lisaCredit = Math.min(Number(contributionByOwner.lisa || 0), Math.max(0, householdContributionTotal - toshiCredit));
+    if (toshiCredit > 0) {
+      const credit = half(toshiCredit);
+      wifeDueGross = Math.max(0, wifeDueGross - credit);
+      wifeTransferLines.push({ source: 'household_contribution', id: null, date: null, description: 'External household contribution received by Husband', category: 'household_contribution', original_amount: toshiCredit, wife_due_amount: -credit, reason: 'household_contribution_received_by_husband', share_rate: 0.5 });
+    }
+    if (lisaCredit > 0) {
+      const credit = half(lisaCredit);
+      husbandDueGross = Math.max(0, husbandDueGross - credit);
+      wifeTransferLines.push({ source: 'household_contribution', id: null, date: null, description: 'External household contribution received by Wife', category: 'household_contribution', original_amount: lisaCredit, wife_due_amount: credit, reason: 'household_contribution_received_by_wife', share_rate: 0.5 });
+    }
+  }
   const netWifeToHusband = wifeDueGross - husbandDueGross;
   const wifeTransferDue = Math.max(0, netWifeToHusband);
   const husbandToWifeDue = Math.max(0, -netWifeToHusband);
@@ -359,6 +399,8 @@ app.get('/dashboard/:month', async (c) => {
     split_paid_by_husband: wifeTransferLines.filter((x) => x.reason === 'split_paid_by_husband').reduce((a, x) => a + Math.max(0, Number(x.wife_due_amount || 0)), 0),
     fixed_or_scheduled_paid_by_husband: wifeTransferLines.filter((x) => x.reason === 'fixed_or_scheduled_paid_by_husband').reduce((a, x) => a + Math.max(0, Number(x.wife_due_amount || 0)), 0),
     credit_husband_paid_by_wife: Math.abs(wifeTransferLines.filter((x) => Number(x.wife_due_amount || 0) < 0).reduce((a, x) => a + Number(x.wife_due_amount || 0), 0)),
+    household_contribution_received_by_husband: Math.abs(wifeTransferLines.filter((x) => x.reason === 'household_contribution_received_by_husband').reduce((a, x) => a + Number(x.wife_due_amount || 0), 0)),
+    household_contribution_received_by_wife: wifeTransferLines.filter((x) => x.reason === 'household_contribution_received_by_wife').reduce((a, x) => a + Math.max(0, Number(x.wife_due_amount || 0)), 0),
   };
 
   const balances = await latestBalances(c.env.DB);
@@ -373,7 +415,6 @@ app.get('/dashboard/:month', async (c) => {
   const openingByOwner = { toshi: 0, lisa: 0, shared: 0, other: 0 } as Record<Owner, number>;
   for (const b of balances) openingByOwner[ownerValue(b.owner)] += Number(b.balance || 0);
   const cashEvents: CashEvent[] = [];
-  const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]);
   for (const x of incomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'income', source: 'income' });
   for (const x of recurringIncomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'recurring income', source: 'recurring_income' });
   for (const r of rows) {
@@ -401,6 +442,8 @@ app.get('/dashboard/:month', async (c) => {
     },
     household: {
       total: householdTotal,
+      gross_total: householdTotal + householdContributionTotal,
+      household_contribution: householdContributionTotal,
       split_total: splitTotal,
       split_each: half(splitTotal),
       wife_personal_advanced: wifePersonal,

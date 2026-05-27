@@ -19,6 +19,7 @@ function selectKind(value = 'salary'): HTMLSelectElement {
     ['bonus', L('賞与', 'Bonus')],
     ['temporary', L('臨時収入', 'Temporary')],
     ['other', L('その他収入', 'Other income')],
+    ['household_contribution', L('同居家族の生活費負担金', 'Household contribution')],
   ].forEach(([v, label]) => s.appendChild(el('option', { value: v }, [label])));
   s.value = value;
   return s;
@@ -78,25 +79,27 @@ export function renderIncomes(root: HTMLElement) {
       const clearError = () => { feedback.textContent = ''; feedback.style.display = 'none'; };
 
       content.appendChild(el('div', { class: 'banner banner-info' }, [
-        L('💰 収入は保存すると概要・分析・口座不足見込みへ連動します。毎月入る8万円などは「🔁 継続収入」で夫・その他収入として登録できます。', 'Saved income flows into Overview, Analytics, and cashflow forecasts. Use recurring income for monthly other income.'),
+        L('💰 給与などは夫婦の収入として集計します。同居家族からの生活費8万円などは「同居家族の生活費負担金」にすると、夫の収入ではなく家計支出の控除として扱います。', 'Salary is counted as partner income. Household contributions from a co-resident are treated as spending offsets, not partner income.'),
       ]));
       content.appendChild(feedback);
 
       content.appendChild(addIncomeCard(month, clearError, showError, () => load(picker.get())));
       content.appendChild(addRecurringCard(clearError, showError, () => load(picker.get())));
 
-      const recurringTotal = recurring.items.reduce((a, x) => a + Number(x.amount || 0), 0);
-      const oneTimeTotal = list.items.reduce((a, x) => a + Number(x.amount || 0), 0);
-      const recurringToshi = recurring.items.filter((x) => x.owner === 'toshi').reduce((a, x) => a + Number(x.amount || 0), 0);
-      const recurringLisa = recurring.items.filter((x) => x.owner === 'lisa').reduce((a, x) => a + Number(x.amount || 0), 0);
+      const isContribution = (x: any) => x.kind === 'household_contribution';
+      const recurringTotal = recurring.items.filter((x) => !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const oneTimeTotal = list.items.filter((x) => !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const contributionTotal = [...list.items, ...recurring.items].filter(isContribution).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const recurringToshi = recurring.items.filter((x) => x.owner === 'toshi' && !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0);
+      const recurringLisa = recurring.items.filter((x) => x.owner === 'lisa' && !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0);
       const total = oneTimeTotal + recurringTotal;
-      const toshi = list.items.filter((x) => x.owner === 'toshi').reduce((a, x) => a + Number(x.amount || 0), 0) + recurringToshi;
-      const lisa = list.items.filter((x) => x.owner === 'lisa').reduce((a, x) => a + Number(x.amount || 0), 0) + recurringLisa;
+      const toshi = list.items.filter((x) => x.owner === 'toshi' && !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0) + recurringToshi;
+      const lisa = list.items.filter((x) => x.owner === 'lisa' && !isContribution(x)).reduce((a, x) => a + Number(x.amount || 0), 0) + recurringLisa;
       content.appendChild(el('div', { class: 'card-grid' }, [
         metric(L('📊 当月収入合計', '📊 Monthly income'), total),
         metric(L('👤 夫収入', '👤 Husband income'), toshi),
         metric(L('👤 妻収入', '👤 Wife income'), lisa),
-        metric(L('🔁 継続収入/月', '🔁 Recurring / month'), recurringTotal),
+        metric(L('🏠 生活費負担金', '🏠 Household contribution'), contributionTotal),
       ]));
 
       content.appendChild(incomeTable(month, list.items, clearError, showError, () => load(month)));
@@ -147,11 +150,11 @@ function addRecurringCard(clearError: () => void, showError: (e: any) => void, r
   const note = el('input', { name: 'note', autocomplete: 'off', placeholder: L('メモ', 'Note') }) as HTMLInputElement;
   card.appendChild(el('div', { class: 'row-flex', style: 'margin:8px 0' }, [
     el('button', { class: 'ghost', type: 'button', onClick: () => {
-      name.value = L('その他収入 80,000円', 'Other income 80,000');
+      name.value = L('姉 生活費 80,000円', 'Sister household contribution 80,000');
       owner.value = 'toshi';
       amount.value = '80000';
-      kind.value = 'other';
-    } }, [L('⚡ 夫のその他収入 80,000円を入力', '⚡ Fill Husband other income 80,000')]),
+      kind.value = 'household_contribution';
+    } }, [L('⚡ 姉からの生活費 80,000円を入力', '⚡ Fill sister contribution 80,000')]),
   ]));
   card.appendChild(el('div', { class: 'form-grid' }, [
     field(L('名前', 'Name'), name),

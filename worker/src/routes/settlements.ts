@@ -55,6 +55,10 @@ function scheduledOccursInMonth(sp: any, month: string): boolean {
   return year >= startYear && (year - startYear) % interval === 0;
 }
 
+function isHouseholdContribution(row: any): boolean {
+  return String(row.kind || '').toLowerCase() === 'household_contribution';
+}
+
 async function settlementForMonth(db: D1Database, month: string) {
   const expenses = await selectAll<any>(db, `SELECT e.*, c.name AS card_name FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
      WHERE e.archived_at IS NULL AND e.billing_month = ?
@@ -76,6 +80,8 @@ async function settlementForMonth(db: D1Database, month: string) {
      ORDER BY sort_order ASC, id ASC`);
   const scheduled = allScheduled.filter((sp) => scheduledOccursInMonth(sp, month)).filter((sp) => !plannedMatchesExpense(sp, expenses));
   const adjustments = await selectAll<any>(db, `SELECT * FROM settlement_adjustments WHERE month = ? AND archived_at IS NULL ORDER BY created_at ASC, id ASC`, [month]);
+  const oneTimeContributions = await selectAll<any>(db, `SELECT * FROM incomes WHERE archived_at IS NULL AND kind = 'household_contribution' AND substr(date, 1, 7) = ?`, [month]);
+  const recurringContributions = await selectAll<any>(db, `SELECT * FROM recurring_incomes WHERE active = 1 AND archived_at IS NULL AND kind = 'household_contribution'`, []);
 
   let toshiPaid = 0, lisaPaid = 0, sharedPaid = 0, splitTotal = 0, wifePersonal = 0, husbandPersonal = 0, wifeDueGross = 0, husbandDueGross = 0, adjustmentNet = 0;
   const lines: any[] = [];
@@ -102,13 +108,30 @@ async function settlementForMonth(db: D1Database, month: string) {
     adjustmentNet += a.direction === 'lisa_to_toshi' ? amt : a.direction === 'toshi_to_lisa' ? -amt : 0;
     lines.push({ kind: 'adjustment', ...a, date: a.created_at?.slice(0,10), description: a.description, amount: amt });
   }
+  const contributionTotal = Math.min(
+    splitTotal,
+    oneTimeContributions.concat(recurringContributions).filter(isHouseholdContribution).reduce((a, x) => a + Number(x.amount || 0), 0)
+  );
+  if (contributionTotal > 0) {
+    splitTotal -= contributionTotal;
+    const byOwner = oneTimeContributions.concat(recurringContributions).reduce((acc, x) => {
+      const o = owner(x.owner);
+      acc[o] = Number(acc[o] || 0) + Number(x.amount || 0);
+      return acc;
+    }, {} as Record<Owner, number>);
+    const toshiCredit = Math.min(Number(byOwner.toshi || 0), contributionTotal);
+    const lisaCredit = Math.min(Number(byOwner.lisa || 0), Math.max(0, contributionTotal - toshiCredit));
+    if (toshiCredit > 0) wifeDueGross = Math.max(0, wifeDueGross - half(toshiCredit));
+    if (lisaCredit > 0) husbandDueGross = Math.max(0, husbandDueGross - half(lisaCredit));
+    lines.push({ kind: 'household_contribution', date: month, description: 'External household contribution', amount: -contributionTotal, paid_by: 'other', burden_owner: 'shared', split: true });
+  }
   const baseNet = wifeDueGross - husbandDueGross;
   const net = baseNet + adjustmentNet;
   const amount = Math.abs(net);
   const direction = net > 0 ? 'lisa_to_toshi' : net < 0 ? 'toshi_to_lisa' : 'none';
   return {
     month,
-    summary: { total: expenses.reduce((a, x) => a + Number(x.amount || 0), 0) + fixed.reduce((a, x) => a + Number(x.amount || 0), 0) + scheduled.reduce((a, x) => a + Number(x.amount || 0), 0), toshi_paid: toshiPaid, lisa_paid: lisaPaid, shared_pot_paid: sharedPaid, split_total: splitTotal, split_each: half(splitTotal), wife_personal: wifePersonal, husband_personal: husbandPersonal, wife_due_gross: wifeDueGross, husband_due_gross: husbandDueGross, adjustment_net: adjustmentNet, direction, amount, lisa_to_toshi: Math.max(0, net), toshi_to_lisa: Math.max(0, -net) },
+    summary: { total: expenses.reduce((a, x) => a + Number(x.amount || 0), 0) + fixed.reduce((a, x) => a + Number(x.amount || 0), 0) + scheduled.reduce((a, x) => a + Number(x.amount || 0), 0) - contributionTotal, household_contribution: contributionTotal, toshi_paid: toshiPaid, lisa_paid: lisaPaid, shared_pot_paid: sharedPaid, split_total: splitTotal, split_each: half(splitTotal), wife_personal: wifePersonal, husband_personal: husbandPersonal, wife_due_gross: wifeDueGross, husband_due_gross: husbandDueGross, adjustment_net: adjustmentNet, direction, amount, lisa_to_toshi: Math.max(0, net), toshi_to_lisa: Math.max(0, -net) },
     lines,
     adjustments,
   };
