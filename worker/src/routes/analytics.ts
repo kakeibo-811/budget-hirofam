@@ -183,6 +183,19 @@ async function scheduledOccurrences(db: D1Database, period: { start: string; end
   return out;
 }
 
+async function recurringIncomeOccurrences(db: D1Database, period: { start: string; end: string }, month: string): Promise<any[]> {
+  const rows = await selectAll<any>(db, `SELECT * FROM recurring_incomes WHERE active = 1 AND archived_at IS NULL ORDER BY owner ASC, pay_day ASC, id ASC`);
+  const months = [month, addMonths(month, 1)];
+  const out: any[] = [];
+  for (const r of rows) {
+    for (const m of months) {
+      const date = dueDateForMonthly(m, Number(r.pay_day || 1));
+      if (inRange(date, period.start, period.end)) out.push({ ...r, date, description: r.name || 'recurring income' });
+    }
+  }
+  return out;
+}
+
 
 async function fixedOccurrences(db: D1Database, month: string): Promise<any[]> {
   const rows = await selectAll<any>(db, `SELECT s.*, f.name, f.owner, f.split, f.pay_day, f.category, f.account_id,
@@ -246,6 +259,13 @@ app.get('/dashboard/:month', async (c) => {
        COALESCE(SUM(CASE WHEN owner = 'toshi' THEN amount ELSE 0 END), 0) AS toshi,
        COALESCE(SUM(CASE WHEN owner = 'lisa' THEN amount ELSE 0 END), 0) AS lisa
      FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]) || { total: 0, toshi: 0, lisa: 0 };
+  const recurringIncomeRows = await recurringIncomeOccurrences(c.env.DB, period, month);
+  for (const r of recurringIncomeRows) {
+    const amt = Number(r.amount || 0);
+    income.total += amt;
+    if (ownerValue(r.owner) === 'toshi') income.toshi += amt;
+    if (ownerValue(r.owner) === 'lisa') income.lisa += amt;
+  }
 
   const rows = await selectAll<any>(c.env.DB, `SELECT e.*, c.name AS card_name, c.owner AS card_owner, c.default_paid_by AS card_default_paid_by, c.default_burden_owner AS card_default_burden_owner
      FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
@@ -355,6 +375,7 @@ app.get('/dashboard/:month', async (c) => {
   const cashEvents: CashEvent[] = [];
   const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]);
   for (const x of incomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'income', source: 'income' });
+  for (const x of recurringIncomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'recurring income', source: 'recurring_income' });
   for (const r of rows) {
     const burden = inferBurdenOwner(r);
     if (burden === 'other') continue;
