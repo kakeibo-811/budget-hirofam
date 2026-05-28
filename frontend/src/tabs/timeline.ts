@@ -31,9 +31,10 @@ export function renderTimeline(root: HTMLElement) {
     try {
       const data = await api.get<any>(`/api/analytics/cashflow-range?from=${from.value}&to=${to.value}`);
       clear(content);
+      content.appendChild(timelineManualForm(load));
       content.appendChild(accountBalances(data, load));
       content.appendChild(summary(data));
-      content.appendChild(timelineGrid(data));
+      content.appendChild(timelineGrid(data, load));
     } catch (e: any) {
       clear(content);
       content.appendChild(el('div', { class: 'banner banner-error' }, [`${L('\u30a8\u30e9\u30fc', 'Error')}: ${e.message}`]));
@@ -63,6 +64,49 @@ function summary(data: any): HTMLElement {
       el('div', { class: 'muted' }, [shortfall ? `${L('\u4e0d\u8db3', 'Shortfall')} ${formatYen(shortfall)} / ${row.lowest_date || ''}` : L('\u4e0d\u8db3\u898b\u8fbc\u307f\u306a\u3057', 'No projected shortfall')]),
     ]);
   }));
+}
+
+function timelineManualForm(refresh: () => void): HTMLElement {
+  const date = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10) }) as HTMLInputElement;
+  const owner = el('select', {}, [
+    el('option', { value: 'toshi' }, [L('夫口座', 'Husband')]),
+    el('option', { value: 'lisa' }, [L('妻口座', 'Wife')]),
+    el('option', { value: 'shared' }, [L('共通口座', 'Shared')]),
+  ]) as HTMLSelectElement;
+  const amount = el('input', { type: 'number', inputmode: 'numeric', placeholder: L('出金はマイナス', 'Minus for payment') }) as HTMLInputElement;
+  const label = el('input', { type: 'text', placeholder: L('内容', 'Label') }) as HTMLInputElement;
+  const status = el('div', { class: 'muted' });
+  const save = el('button', {
+    class: 'btn primary',
+    type: 'button',
+    onClick: async () => {
+      try {
+        status.textContent = L('保存中...', 'Saving...');
+        await api.post<any>('/api/analytics/timeline-events', {
+          date: date.value,
+          owner: owner.value,
+          amount: Number(amount.value || 0),
+          label: label.value,
+        });
+        amount.value = '';
+        label.value = '';
+        status.textContent = L('追加しました', 'Added');
+        await refresh();
+      } catch (e: any) {
+        status.textContent = `${L('追加失敗', 'Add failed')}: ${e.message}`;
+      }
+    },
+  }, [L('明細を追加', 'Add item')]);
+  return el('section', { class: 'card soft-card timeline-manual-form' }, [
+    el('h3', {}, [L('Timeline手入力', 'Manual timeline item')]),
+    el('div', { class: 'form-grid' }, [
+      el('label', {}, [L('日付', 'Date'), date]),
+      el('label', {}, [L('口座', 'Account'), owner]),
+      el('label', {}, [L('金額', 'Amount'), amount]),
+      el('label', {}, [L('内容', 'Label'), label]),
+    ]),
+    el('div', { class: 'row-flex' }, [save, status]),
+  ]);
 }
 
 function accountBalances(data: any, refresh: () => void): HTMLElement {
@@ -158,37 +202,65 @@ function accountBalanceEditor(account: any, owner: OwnerKey, refresh: () => void
   ]);
 }
 
-function timelineGrid(data: any): HTMLElement {
+function timelineGrid(data: any, refresh: () => void): HTMLElement {
   const f = data.forecasts || {};
-  return el('div', { class: 'overview-main-grid' }, (['toshi', 'lisa', 'shared'] as OwnerKey[]).map((owner) => timelineCard(owner, f[owner]?.timeline || [])));
+  return el('div', { class: 'overview-main-grid' }, (['toshi', 'lisa', 'shared'] as OwnerKey[]).map((owner) => timelineCard(owner, f[owner]?.timeline || [], refresh)));
 }
 
-function timelineCard(owner: OwnerKey, rows: any[]): HTMLElement {
+function timelineCard(owner: OwnerKey, rows: any[], refresh: () => void): HTMLElement {
   const card = el('details', { class: 'card soft-card', open: owner === 'toshi' ? 'open' : null }, [
     el('summary', {}, [ownerLabel(owner)]),
   ]);
   card.appendChild(el('p', { class: 'muted' }, [ownerHelp(owner)]));
   const wrap = el('div', { class: 'table-wrap timeline-table-wrap' });
   const table = el('table', { class: 'data compact-table timeline-table' });
-  table.innerHTML = `<thead><tr><th>${L('\u65e5\u4ed8', 'Date')}</th><th>${L('\u5185\u5bb9', 'Label')}</th><th class="num">${L('\u5897\u6e1b', 'Delta')}</th><th class="num">${L('\u6b8b\u9ad8', 'Balance')}</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th>${L('\u65e5\u4ed8', 'Date')}</th><th>${L('\u5185\u5bb9', 'Label')}</th><th class="num">${L('\u5897\u6e1b', 'Delta')}</th><th class="num">${L('\u6b8b\u9ad8', 'Balance')}</th><th>${L('\u64cd\u4f5c', 'Action')}</th></tr></thead>`;
   const tb = el('tbody');
-  if (!rows.length) tb.appendChild(el('tr', {}, [el('td', { colspan: '4', class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')])]));
+  if (!rows.length) tb.appendChild(el('tr', {}, [el('td', { colspan: '5', class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')])]));
   for (const r of rows) {
     tb.appendChild(el('tr', {}, [
       el('td', { class: 'mono', 'data-label': L('\u65e5\u4ed8', 'Date') }, [r.date || '']),
       el('td', { 'data-label': L('\u5185\u5bb9', 'Label') }, [r.label || r.source || '']),
       el('td', { class: 'num timeline-delta', 'data-label': L('\u5897\u6e1b', 'Delta') }, [formatYen(r.amount || 0)]),
       el('td', { class: 'num timeline-balance', 'data-label': L('\u6b8b\u9ad8', 'Balance') }, [formatYen(r.balance_after || 0)]),
+      el('td', { 'data-label': L('\u64cd\u4f5c', 'Action') }, [timelineDeleteButton(r, refresh)]),
     ]));
   }
   table.appendChild(tb);
   wrap.appendChild(table);
   card.appendChild(wrap);
-  card.appendChild(timelineMobileList(rows));
+  card.appendChild(timelineMobileList(rows, refresh));
   return card;
 }
 
-function timelineMobileList(rows: any[]): HTMLElement {
+function timelineDeleteButton(row: any, refresh: () => void): HTMLElement {
+  return el('button', {
+    class: 'btn ghost timeline-delete-btn',
+    type: 'button',
+    title: L('Timelineから消す', 'Remove from timeline'),
+    onClick: async () => {
+      try {
+        if (row.manual_id) {
+          await api.delete<any>(`/api/analytics/timeline-events/${row.manual_id}`);
+        } else {
+          await api.post<any>('/api/analytics/timeline-suppressions', {
+            event_key: row.event_key,
+            source: row.source,
+            label: row.label,
+            date: row.date,
+            owner: row.owner,
+            amount: row.amount,
+          });
+        }
+        await refresh();
+      } catch (e: any) {
+        alert(`${L('削除失敗', 'Remove failed')}: ${e.message}`);
+      }
+    },
+  }, ['×']);
+}
+
+function timelineMobileList(rows: any[], refresh: () => void): HTMLElement {
   const list = el('div', { class: 'timeline-mobile-list' });
   if (!rows.length) {
     list.appendChild(el('div', { class: 'timeline-mobile-row muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')]));
@@ -207,6 +279,7 @@ function timelineMobileList(rows: any[]): HTMLElement {
         el('span', {}, [L('\u5897\u6e1b\u5f8c\u6b8b\u9ad8', 'Balance after delta')]),
         el('strong', {}, [formatYen(balance)]),
       ]),
+      el('div', { class: 'timeline-mobile-actions' }, [timelineDeleteButton(r, refresh)]),
     ]));
   }
   return list;

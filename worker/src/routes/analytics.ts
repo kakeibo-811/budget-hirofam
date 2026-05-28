@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../index';
-import { selectAll, selectOne } from '../db/helpers';
+import { exec, selectAll, selectOne } from '../db/helpers';
 import { projectionFromDb } from './assets';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 type Owner = 'toshi' | 'lisa' | 'shared' | 'other';
-type CashEvent = { date: string; owner: Owner; amount: number; kind: 'income' | 'payment'; label: string; source: string };
+type CashEvent = { date: string; owner: Owner; amount: number; kind: 'income' | 'payment'; label: string; source: string; event_key?: string; manual_id?: number; editable?: boolean };
 type AppSettings = Record<string, string>;
 
 const dashboardSettingDefaults: AppSettings = {
@@ -47,6 +47,17 @@ function ownerValue(v: any): Owner {
   };
   return map[raw] || map[s] || 'other';
 }
+function cleanOwner(v: any): Owner {
+  const owner = ownerValue(v);
+  return owner === 'other' ? 'shared' : owner;
+}
+function cleanKind(v: any): 'income' | 'payment' {
+  return String(v || '').toLowerCase() === 'income' ? 'income' : 'payment';
+}
+function cleanDate(v: any): string | null {
+  const s = String(v || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
 function monthList(from: string, to: string): string[] {
   const out: string[] = [];
   let cur = /^\d{4}-\d{2}$/.test(from) ? from : new Date().toISOString().slice(0, 7);
@@ -81,6 +92,35 @@ async function putAppSettings(db: D1Database, items: Record<string, string | num
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
     ).bind(key, String(value), 'Editable app behavior setting').run();
   }
+}
+
+function timelineEventKey(e: CashEvent): string {
+  return [e.date, e.owner, Math.round(Number(e.amount || 0)), e.kind, e.source, e.label || ''].join('|');
+}
+
+function withTimelineKey(e: CashEvent): CashEvent {
+  return { ...e, event_key: e.event_key || timelineEventKey(e) };
+}
+
+async function timelineManualEvents(db: D1Database, start: string, end: string): Promise<CashEvent[]> {
+  const rows = await selectAll<any>(db, `SELECT * FROM timeline_manual_events
+     WHERE archived_at IS NULL AND event_date >= ? AND event_date <= ?
+     ORDER BY event_date ASC, id ASC`, [start, end]);
+  return rows.map((r) => withTimelineKey({
+    date: r.event_date,
+    owner: cleanOwner(r.owner),
+    amount: Number(r.amount || 0),
+    kind: cleanKind(r.kind),
+    label: r.label || 'Manual timeline item',
+    source: 'timeline_manual',
+    manual_id: Number(r.id),
+    editable: true,
+  }));
+}
+
+async function activeTimelineSuppressions(db: D1Database): Promise<Set<string>> {
+  const rows = await selectAll<{ event_key: string }>(db, `SELECT event_key FROM timeline_event_suppressions WHERE archived_at IS NULL`);
+  return new Set(rows.map((r) => r.event_key));
 }
 
 function inferActualPayer(row: any): Owner {
@@ -562,7 +602,8 @@ app.get('/cashflow-range', async (c) => {
   const cashEvents: CashEvent[] = [];
   const seen = new Set<string>();
   const pushEvent = (e: CashEvent) => {
-    const key = [e.date, e.owner, e.amount, e.source, e.label].join('|');
+    e = withTimelineKey(e);
+    const key = e.event_key || timelineEventKey(e);
     if (seen.has(key)) return;
     seen.add(key);
     cashEvents.push(e);
@@ -584,13 +625,64 @@ app.get('/cashflow-range', async (c) => {
     for (const sp of deduped.scheduled) pushEvent({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
     for (const fp of deduped.fixed) pushEvent({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
   }
+  for (const e of await timelineManualEvents(c.env.DB, `${from}-01`, `${to}-31`)) pushEvent(e);
+  const suppressed = await activeTimelineSuppressions(c.env.DB);
+  const visibleEvents = cashEvents.filter((e) => !suppressed.has(e.event_key || timelineEventKey(e)));
 
   const forecasts = {
-    toshi: makeForecast('toshi', cashEvents, openingByOwner.toshi),
-    lisa: makeForecast('lisa', cashEvents, openingByOwner.lisa),
-    shared: makeForecast('shared', cashEvents, openingByOwner.shared),
+    toshi: makeForecast('toshi', visibleEvents, openingByOwner.toshi),
+    lisa: makeForecast('lisa', visibleEvents, openingByOwner.lisa),
+    shared: makeForecast('shared', visibleEvents, openingByOwner.shared),
   };
-  return c.json({ from, to, months, account_balances: balances, forecasts, events: cashEvents.sort((a, b) => a.date.localeCompare(b.date)) });
+  return c.json({ from, to, months, account_balances: balances, forecasts, events: visibleEvents.sort((a, b) => a.date.localeCompare(b.date)) });
+});
+
+app.post('/timeline-events', async (c) => {
+  const b = await c.req.json<any>();
+  const date = cleanDate(b.date || b.event_date);
+  if (!date) return c.json({ error: 'valid date is required' }, 400);
+  const amount = Math.round(Number(b.amount || 0));
+  if (!Number.isFinite(amount) || amount === 0) return c.json({ error: 'non-zero amount is required' }, 400);
+  const label = String(b.label || '').trim();
+  if (!label) return c.json({ error: 'label is required' }, 400);
+  const kind = amount > 0 ? 'income' : cleanKind(b.kind);
+  const r = await c.env.DB.prepare(
+    `INSERT INTO timeline_manual_events (event_date, owner, amount, kind, label, note)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(date, cleanOwner(b.owner), amount, kind, label, b.note || null).run();
+  return c.json({ id: r.meta.last_row_id }, 201);
+});
+
+app.delete('/timeline-events/:id', async (c) => {
+  await exec(c.env.DB, `UPDATE timeline_manual_events SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [Number(c.req.param('id'))]);
+  return c.json({ ok: true });
+});
+
+app.post('/timeline-suppressions', async (c) => {
+  const b = await c.req.json<any>();
+  const eventKey = String(b.event_key || '').trim();
+  if (!eventKey) return c.json({ error: 'event_key is required' }, 400);
+  await c.env.DB.prepare(
+    `INSERT INTO timeline_event_suppressions (event_key, source, label, event_date, owner, amount, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(event_key) WHERE archived_at IS NULL DO UPDATE SET
+       source = excluded.source,
+       label = excluded.label,
+       event_date = excluded.event_date,
+       owner = excluded.owner,
+       amount = excluded.amount,
+       note = excluded.note,
+       updated_at = CURRENT_TIMESTAMP`
+  ).bind(
+    eventKey,
+    b.source || null,
+    b.label || null,
+    cleanDate(b.date || b.event_date),
+    b.owner ? cleanOwner(b.owner) : null,
+    Number.isFinite(Number(b.amount)) ? Math.round(Number(b.amount)) : null,
+    b.note || null
+  ).run();
+  return c.json({ ok: true });
 });
 
 app.get('/timeline', async (c) => {
