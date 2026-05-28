@@ -77,7 +77,6 @@ const defaultSettings: AssetSettings = {
 };
 
 const settingAliases: Record<string, string[]> = {
-  loan_repayment_day: ['mortgage_repayment_day', 'mortgage_pay_day', 'home_loan_repayment_day', 'home_loan_pay_day', 'repayment_day'],
   repair_reserve_monthly_deposit: [
     'monthly_repair_saving',
     'monthly_repair_reserve_deposit',
