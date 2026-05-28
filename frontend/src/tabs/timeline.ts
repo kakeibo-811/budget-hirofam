@@ -29,7 +29,7 @@ export function renderTimeline(root: HTMLElement) {
     clear(content);
     content.appendChild(el('div', { class: 'muted' }, [L('\u8aad\u307f\u8fbc\u307f\u4e2d...', 'Loading...')]));
     try {
-      const data = await api.get<any>(`/api/analytics/cashflow-range?from=${from.value}&to=${to.value}&_ts=${Date.now()}`);
+      const data = await api.get<any>(`/api/analytics/cashflow-range?from=${from.value}&to=${to.value}`);
       clear(content);
       content.appendChild(accountBalances(data, load));
       content.appendChild(summary(data));
@@ -151,49 +151,36 @@ function accountBalanceEditor(account: any, owner: OwnerKey, refresh: () => void
 
 function timelineGrid(data: any): HTMLElement {
   const f = data.forecasts || {};
-  return el('div', { class: 'overview-main-grid' }, (['toshi', 'lisa', 'shared'] as OwnerKey[]).map((owner) => timelineCard(owner, f[owner] || {})));
+  return el('div', { class: 'overview-main-grid' }, (['toshi', 'lisa', 'shared'] as OwnerKey[]).map((owner) => timelineCard(owner, f[owner]?.timeline || [])));
 }
 
-function timelineCard(owner: OwnerKey, forecast: any): HTMLElement {
-  const rows = forecast.timeline || [];
-  const opening = Number(forecast.opening_balance || 0);
+function timelineCard(owner: OwnerKey, rows: any[]): HTMLElement {
   const card = el('details', { class: 'card soft-card', open: owner === 'toshi' ? 'open' : null }, [
     el('summary', {}, [ownerLabel(owner)]),
   ]);
   card.appendChild(el('p', { class: 'muted' }, [ownerHelp(owner)]));
   const list = el('div', { class: 'timeline-event-list' });
-  list.appendChild(timelineEvent({
-    date: L('\u8d77\u70b9', 'Start'),
-    label: L('\u624b\u52d5\u5165\u529b\u5f8c\u306e\u8d77\u70b9\u6b8b\u9ad8', 'Opening balance after manual edit'),
-    source: 'opening_balance',
-    amount: 0,
-    balance_after: opening,
-  }));
   if (!rows.length) {
-    list.appendChild(el('div', { class: 'muted' }, [L('\u5165\u51fa\u91d1\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No cashflow events')]));
+    list.appendChild(el('div', { class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')]));
     card.appendChild(list);
     return card;
   }
   for (const r of rows) {
-    list.appendChild(timelineEvent(r));
+    const amount = Number(r.amount || 0);
+    const balance = Number(r.balance_after || 0);
+    list.appendChild(el('article', { class: `timeline-event ${balance < 0 ? 'is-negative' : ''}` }, [
+      el('div', { class: 'timeline-event-main' }, [
+        el('span', { class: 'mono timeline-event-date' }, [r.date || '']),
+        el('strong', {}, [r.label || r.source || '']),
+        el('small', { class: 'muted' }, [r.source || '']),
+      ]),
+      el('div', { class: 'timeline-event-money' }, [
+        el('span', { class: amount < 0 ? 'is-negative' : 'is-positive' }, [formatYen(amount)]),
+        el('b', {}, [formatYen(balance)]),
+        el('small', { class: 'muted' }, [L('\u6b8b\u9ad8', 'Balance')]),
+      ]),
+    ]));
   }
   card.appendChild(list);
   return card;
-}
-
-function timelineEvent(r: any): HTMLElement {
-  const amount = Number(r.amount || 0);
-  const balance = Number(r.balance_after || 0);
-  return el('article', { class: `timeline-event ${balance < 0 ? 'is-negative' : ''}` }, [
-    el('div', { class: 'timeline-event-main' }, [
-      el('span', { class: 'mono timeline-event-date' }, [r.date || '']),
-      el('strong', {}, [r.label || r.source || '']),
-      el('small', { class: 'muted' }, [r.source || '']),
-    ]),
-    el('div', { class: 'timeline-event-money' }, [
-      el('span', { class: amount < 0 ? 'is-negative' : 'is-positive' }, [formatYen(amount)]),
-      el('b', {}, [formatYen(balance)]),
-      el('small', { class: 'muted' }, [L('\u6b8b\u9ad8', 'Balance')]),
-    ]),
-  ]);
 }
