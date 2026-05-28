@@ -159,21 +159,28 @@ function timelineCard(owner: OwnerKey, rows: any[]): HTMLElement {
     el('summary', {}, [ownerLabel(owner)]),
   ]);
   card.appendChild(el('p', { class: 'muted' }, [ownerHelp(owner)]));
-  const wrap = el('div', { class: 'table-wrap' });
-  const table = el('table', { class: 'data compact-table' });
-  table.innerHTML = `<thead><tr><th>${L('\u65e5\u4ed8', 'Date')}</th><th>${L('\u5185\u5bb9', 'Label')}</th><th class="num">${L('\u5897\u6e1b', 'Delta')}</th><th class="num">${L('\u6b8b\u9ad8', 'Balance')}</th></tr></thead>`;
-  const tb = el('tbody');
-  if (!rows.length) tb.appendChild(el('tr', {}, [el('td', { colspan: '4', class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')])]));
+  const list = el('div', { class: 'timeline-event-list' });
+  if (!rows.length) {
+    list.appendChild(el('div', { class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')]));
+    card.appendChild(list);
+    return card;
+  }
   for (const r of rows) {
-    tb.appendChild(el('tr', {}, [
-      el('td', { class: 'mono' }, [r.date || '']),
-      el('td', {}, [r.label || r.source || '']),
-      el('td', { class: 'num' }, [formatYen(r.amount || 0)]),
-      el('td', { class: 'num' }, [formatYen(r.balance_after || 0)]),
+    const amount = Number(r.amount || 0);
+    const balance = Number(r.balance_after || 0);
+    list.appendChild(el('article', { class: `timeline-event ${balance < 0 ? 'is-negative' : ''}` }, [
+      el('div', { class: 'timeline-event-main' }, [
+        el('span', { class: 'mono timeline-event-date' }, [r.date || '']),
+        el('strong', {}, [r.label || r.source || '']),
+        el('small', { class: 'muted' }, [r.source || '']),
+      ]),
+      el('div', { class: 'timeline-event-money' }, [
+        el('span', { class: amount < 0 ? 'is-negative' : 'is-positive' }, [formatYen(amount)]),
+        el('b', {}, [formatYen(balance)]),
+        el('small', { class: 'muted' }, [L('\u6b8b\u9ad8', 'Balance')]),
+      ]),
     ]));
   }
-  table.appendChild(tb);
-  wrap.appendChild(table);
-  card.appendChild(wrap);
+  card.appendChild(list);
   return card;
 }
