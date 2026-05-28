@@ -278,7 +278,6 @@ app.patch('/:id', async (c) => {
     if ('amount' in b) { snapshotSets.push('amount = ?'); params.push(Math.round(Number(b.amount || 0))); }
     if ('paid_by' in b) { snapshotSets.push('paid_by = ?'); params.push(cleanOwner(b.paid_by)); }
     if ('burden_owner' in b) { snapshotSets.push('burden_owner = ?'); params.push(cleanOwner(b.burden_owner)); }
-    if ('pay_day' in b) { snapshotSets.push('payment_due_date = NULL'); }
     if (snapshotSets.length > 0) {
       params.push(id);
       let where = 'fixed_cost_id = ? AND locked = 0';
