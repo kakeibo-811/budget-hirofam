@@ -118,10 +118,11 @@ function accountBalanceEditor(account: any, owner: OwnerKey, refresh: () => void
             target: 'repair_reserve',
             event_type: 'balance_adjustment',
             event_date: date.value,
-            amount: next - current,
+            amount: next,
             paid_by: 'shared',
             burden_owner: 'shared',
-            note: note.value || L('\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u304b\u3089\u4fee\u7e55\u7a4d\u7acb\u91d1\u6b8b\u9ad8\u3092\u4fee\u6b63', 'Repair reserve balance adjusted from timeline'),
+            source_type: 'timeline_balance_set',
+            note: note.value || L('\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u304b\u3089\u4fee\u7e55\u7a4d\u7acb\u91d1\u6b8b\u9ad8\u3092\u4fee\u6b63', 'Repair reserve balance set from timeline'),
           });
         } else {
           await api.post<any>(`/api/accounts/${account.id}/adjust`, {

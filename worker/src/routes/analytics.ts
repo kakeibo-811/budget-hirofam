@@ -252,9 +252,13 @@ async function latestBalances(db: D1Database) {
 async function repairReserveBalance(db: D1Database, month: string): Promise<{ balance: number; as_of_date: string | null }> {
   const projection = await projectionFromDb(db, month, month);
   const row = projection.rows[0];
+  const manual = await selectOne<any>(db, `SELECT event_date FROM asset_rebuild_events
+     WHERE target = 'repair_reserve' AND event_type = 'balance_adjustment' AND source_type = 'timeline_balance_set'
+       AND event_date <= ?
+     ORDER BY event_date DESC, id DESC LIMIT 1`, [`${month}-31`]);
   return {
     balance: Math.round(Number(row?.repair_reserve_balance || 0)),
-    as_of_date: row?.payment_date || null,
+    as_of_date: manual?.event_date || row?.payment_date || null,
   };
 }
 

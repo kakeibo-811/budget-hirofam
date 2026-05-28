@@ -405,6 +405,7 @@ function calculateProjection(settings: AssetSettings, events: AssetRebuildEvent[
     const month = addMonths(startMonth, i);
     const paymentDate = paymentDateForMonth(month, paymentDay);
     let repairDelta = 0;
+    let repairBalanceSet: number | null = null;
     let noteParts: string[] = [];
 
     const thisToshiRepay = Math.min(toshiMonthly, Math.max(0, toshiLoan));
@@ -427,14 +428,18 @@ function calculateProjection(settings: AssetSettings, events: AssetRebuildEvent[
         if (ev.target === 'loan_lisa') { lisaLoan += amount; repairDelta -= amount; }
       }
       if (ev.event_type === 'balance_adjustment') {
-        if (ev.target === 'repair_reserve') { repairDelta += amount; }
+        if (ev.target === 'repair_reserve') {
+          if (ev.source_type === 'timeline_balance_set') repairBalanceSet = Math.max(0, amount);
+          else repairDelta += amount;
+        }
         if (ev.target === 'loan_toshi') { toshiLoan = Math.max(0, amount); }
         if (ev.target === 'loan_lisa') { lisaLoan = Math.max(0, amount); }
       }
       if (ev.event_type === 'mortgage_balance_update' && ev.target === 'home_loan') mortgageBalance = Math.max(0, amount);
       noteParts.push(`${ev.event_type}:${ev.target}:${amount}`);
     }
-    repair += repairDelta;
+    if (repairBalanceSet !== null) repair = repairBalanceSet;
+    else repair += repairDelta;
 
     const imported = importedMortgage.get(month);
     const fallback = fallbackMortgage.get(month);
