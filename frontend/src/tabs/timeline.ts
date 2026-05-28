@@ -159,17 +159,17 @@ function timelineCard(owner: OwnerKey, rows: any[]): HTMLElement {
     el('summary', {}, [ownerLabel(owner)]),
   ]);
   card.appendChild(el('p', { class: 'muted' }, [ownerHelp(owner)]));
-  const wrap = el('div', { class: 'table-wrap' });
-  const table = el('table', { class: 'data compact-table' });
+  const wrap = el('div', { class: 'table-wrap timeline-table-wrap' });
+  const table = el('table', { class: 'data compact-table timeline-table' });
   table.innerHTML = `<thead><tr><th>${L('\u65e5\u4ed8', 'Date')}</th><th>${L('\u5185\u5bb9', 'Label')}</th><th class="num">${L('\u5897\u6e1b', 'Delta')}</th><th class="num">${L('\u6b8b\u9ad8', 'Balance')}</th></tr></thead>`;
   const tb = el('tbody');
   if (!rows.length) tb.appendChild(el('tr', {}, [el('td', { colspan: '4', class: 'muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')])]));
   for (const r of rows) {
     tb.appendChild(el('tr', {}, [
-      el('td', { class: 'mono' }, [r.date || '']),
-      el('td', {}, [r.label || r.source || '']),
-      el('td', { class: 'num' }, [formatYen(r.amount || 0)]),
-      el('td', { class: 'num' }, [formatYen(r.balance_after || 0)]),
+      el('td', { class: 'mono', 'data-label': L('\u65e5\u4ed8', 'Date') }, [r.date || '']),
+      el('td', { 'data-label': L('\u5185\u5bb9', 'Label') }, [r.label || r.source || '']),
+      el('td', { class: 'num timeline-delta', 'data-label': L('\u5897\u6e1b', 'Delta') }, [formatYen(r.amount || 0)]),
+      el('td', { class: 'num timeline-balance', 'data-label': L('\u6b8b\u9ad8', 'Balance') }, [formatYen(r.balance_after || 0)]),
     ]));
   }
   table.appendChild(tb);

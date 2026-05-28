@@ -2235,6 +2235,88 @@ textarea {
   width: 100%;
 }
 
+.timeline-table-wrap {
+  max-width: 100%;
+}
+
+.timeline-table .timeline-balance {
+  min-width: 112px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.timeline-table .timeline-delta {
+  min-width: 96px;
+}
+
+@media (max-width: 640px) {
+  .timeline-table-wrap {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .timeline-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    border-collapse: separate;
+  }
+
+  .timeline-table thead {
+    display: none;
+  }
+
+  .timeline-table tbody,
+  .timeline-table tr,
+  .timeline-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .timeline-table tr {
+    margin: 0 0 10px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .timeline-table td {
+    display: grid;
+    grid-template-columns: minmax(72px, 30%) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    padding: 5px 0;
+    border-bottom: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .timeline-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .timeline-table td.num {
+    text-align: right;
+  }
+
+  .timeline-table .timeline-balance {
+    min-width: 0;
+    padding-top: 8px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    font-size: 17px;
+  }
+}
+
 @media (min-width: 760px) {
   .overview-month-summary {
     grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
