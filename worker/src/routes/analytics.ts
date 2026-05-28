@@ -546,6 +546,7 @@ app.get('/cashflow/:month', async (c) => {
 });
 
 app.get('/cashflow-range', async (c) => {
+  c.header('Cache-Control', 'no-store, max-age=0');
   const from = c.req.query('from') || new Date().toISOString().slice(0, 7);
   const to = c.req.query('to') || addMonths(from, 5);
   const cycleStartDay = Number(c.req.query('cycle_start_day') || 25);
