@@ -2297,6 +2297,33 @@ textarea {
   line-height: 1.6;
 }
 
+.ai-history {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-history-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.ai-history-item summary {
+  cursor: pointer;
+  padding: 12px;
+  font-weight: 800;
+}
+
+.ai-history-item > .muted,
+.ai-history-answer {
+  margin: 0 12px 12px;
+}
+
+.ai-history-answer {
+  min-height: 80px;
+}
+
 .timeline-table-wrap {
   max-width: 100%;
 }

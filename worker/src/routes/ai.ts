@@ -4,7 +4,7 @@ import { selectAll } from '../db/helpers';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
-type AiMode = 'summary' | 'spec';
+type AiMode = 'summary' | 'tab_spec';
 const defaultModel = 'gpt-5.2';
 
 function cleanMonth(v: any): string {
@@ -13,7 +13,8 @@ function cleanMonth(v: any): string {
 }
 
 function cleanMode(v: any): AiMode {
-  return String(v || '').toLowerCase() === 'spec' ? 'spec' : 'summary';
+  const s = String(v || '').toLowerCase();
+  return s === 'spec' || s === 'tab_spec' ? 'tab_spec' : 'summary';
 }
 
 function yen(n: any): string {
@@ -31,15 +32,15 @@ function ownerLabel(v: any): string {
 async function buildContext(c: any, month: string) {
   const [incomes, expenses, recurringIncomes, fixedSnapshots, scheduledPayments, accounts, assetSettings] = await Promise.all([
     selectAll<any>(c.env.DB, `SELECT id, date, amount, owner, description, kind FROM incomes WHERE archived_at IS NULL AND date LIKE ? ORDER BY date ASC, id ASC LIMIT 200`, [`${month}-%`]),
-    selectAll<any>(c.env.DB, `SELECT id, date, payment_due_date, cycle_month, billing_month, amount, description, category, payer, paid_by, burden_owner, payment_method FROM expenses WHERE archived_at IS NULL AND COALESCE(cycle_month, billing_month) = ? ORDER BY COALESCE(payment_due_date, date) ASC, id ASC LIMIT 300`, [month]),
+    selectAll<any>(c.env.DB, `SELECT id, date, payment_due_date, cycle_month, billing_month, amount, description, payer, paid_by, burden_owner, payment_method FROM expenses WHERE archived_at IS NULL AND COALESCE(cycle_month, billing_month) = ? ORDER BY COALESCE(payment_due_date, date) ASC, id ASC LIMIT 300`, [month]),
     selectAll<any>(c.env.DB, `SELECT id, name, owner, amount, pay_day, kind FROM recurring_incomes WHERE active = 1 AND archived_at IS NULL ORDER BY owner ASC, pay_day ASC, id ASC LIMIT 100`),
-    selectAll<any>(c.env.DB, `SELECT s.id, s.month, s.amount, s.payment_due_date, s.paid_by, s.burden_owner, f.name, f.category, f.pay_day, f.active_from_month, f.active_to_month
+    selectAll<any>(c.env.DB, `SELECT s.id, s.month, s.amount, s.payment_due_date, s.paid_by, s.burden_owner, f.name, f.pay_day, f.active_from_month, f.active_to_month
        FROM fixed_cost_snapshots s
        JOIN fixed_costs f ON f.id = s.fixed_cost_id
        WHERE s.month = ? AND f.archived_at IS NULL
        ORDER BY COALESCE(s.payment_due_date, printf('%s-%02d', s.month, COALESCE(f.pay_day, 1))) ASC, s.id ASC
        LIMIT 200`, [month]),
-    selectAll<any>(c.env.DB, `SELECT id, name, amount, frequency, due_day, due_month, due_date, active_from_month, active_to_month, paid_by, burden_owner, category, active FROM scheduled_payments WHERE archived_at IS NULL ORDER BY sort_order ASC, id ASC LIMIT 200`),
+    selectAll<any>(c.env.DB, `SELECT id, name, amount, frequency, due_day, due_month, due_date, active_from_month, active_to_month, paid_by, burden_owner, active FROM scheduled_payments WHERE archived_at IS NULL ORDER BY sort_order ASC, id ASC LIMIT 200`),
     selectAll<any>(c.env.DB, `SELECT a.id, a.name, a.owner, a.kind, b.balance, b.as_of_date
        FROM accounts a
        LEFT JOIN account_balances b ON b.id = (SELECT id FROM account_balances WHERE account_id = a.id ORDER BY as_of_date DESC, id DESC LIMIT 1)
@@ -51,6 +52,11 @@ async function buildContext(c: any, month: string) {
   const fixedTotal = fixedSnapshots.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   const accountTotal = accounts.reduce((sum, r) => sum + Number(r.balance || 0), 0);
   const largestExpenses = [...expenses].sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)).slice(0, 20);
+  const byPaymentMethod = expenses.reduce((acc, e) => {
+    const key = String(e.payment_method || (e.paid_by ? `paid_by_${e.paid_by}` : 'unspecified'));
+    acc[key] = Number(acc[key] || 0) + Number(e.amount || 0);
+    return acc;
+  }, {} as Record<string, number>);
   return {
     month,
     computed_summary: {
@@ -59,6 +65,7 @@ async function buildContext(c: any, month: string) {
       fixed_total: fixedTotal,
       account_balance_total: accountTotal,
       net_income_minus_expenses: incomeTotal - expenseTotal - fixedTotal,
+      expense_by_payment_method: byPaymentMethod,
     },
     incomes,
     recurring_incomes: recurringIncomes,
@@ -76,29 +83,35 @@ function localAnswer(mode: AiMode, question: string, context: any): string {
   const largest = (context.largest_expenses || []).slice(0, 5);
   const fixed = (context.fixed_cost_snapshots || []).slice(0, 5);
   const accounts = context.accounts || [];
-  if (mode === 'spec') {
+  if (mode === 'tab_spec') {
     return [
-      'AIキーが未設定のため、現在はアプリ内データだけで仕様変更案を作っています。',
+      'AIキー未設定のため、現在はアプリ内データだけでタブ仕様変更案を作っています。',
       '',
       `対象月: ${context.month}`,
       `依頼内容: ${question || '指定なし'}`,
       '',
-      '進め方:',
-      '1. 変更したい仕様を、対象タブ・入力項目・反映先の数値に分けて整理します。',
-      '2. ダッシュボード、精算、分析、Timeline、資産・負債への影響を確認します。',
-      '3. 元データを壊さない形で、Preview限定で実装・検証します。',
+      'タブ仕様変更として扱える範囲:',
+      '- 表示項目、文言、並び順、折りたたみ、iPhone表示',
+      '- 集計根拠リンク、明細表示、履歴表示',
+      '- Dashboard / Timeline / 分析 / 収入 / 固定費 / 資産・負債の連動ルール',
       '',
-      '確認すべき主な連動先:',
+      '変更案:',
+      '1. どのタブを変えるかを明示する。',
+      '2. そのタブで見せる数字の根拠を固定する。',
+      '3. 他タブへ連動する数値と、連動させない表示専用項目を分ける。',
+      '4. Previewで対象月の収入・支出・固定費・Timeline・精算への影響を確認する。',
+      '',
+      '現在の確認用数値:',
       `- 収入: ${yen(summary.income_total)}`,
       `- 明細支出: ${yen(summary.expense_total)}`,
       `- 固定費: ${yen(summary.fixed_total)}`,
       `- 口座残高合計: ${yen(summary.account_balance_total)}`,
       '',
-      '本物のAIを有効化すると、この依頼内容をもとに、より具体的な改修仕様・リスク・テスト観点まで文章化できます。',
+      'この回答はAI履歴に残ります。本物のAIキーを有効化すると、依頼文からより具体的な画面仕様とテスト観点まで作れます。',
     ].join('\n');
   }
   return [
-    'AIキーが未設定のため、現在はアプリ内計算による高速サマリーを表示しています。',
+    'AIキー未設定のため、現在はアプリ内計算による高速サマリーを表示しています。',
     '',
     `対象月: ${context.month}`,
     `収入合計: ${yen(summary.income_total)}`,
@@ -108,14 +121,14 @@ function localAnswer(mode: AiMode, question: string, context: any): string {
     `口座残高合計: ${yen(summary.account_balance_total)}`,
     '',
     '大きい支出:',
-    ...(largest.length ? largest.map((e: any) => `- ${e.payment_due_date || e.date || '-'} ${e.description || e.category || '明細'} ${yen(e.amount)} / ${ownerLabel(e.paid_by || e.payer)}`) : ['- 明細なし']),
+    ...(largest.length ? largest.map((e: any) => `- ${e.payment_due_date || e.date || '-'} ${e.description || e.payment_method || '明細'} ${yen(e.amount)} / ${ownerLabel(e.paid_by || e.payer)}`) : ['- 明細なし']),
     '',
     '固定費の先頭:',
     ...(fixed.length ? fixed.map((f: any) => `- ${f.payment_due_date || `${f.month}-${String(f.pay_day || 1).padStart(2, '0')}`} ${f.name || '固定費'} ${yen(f.amount)} / ${ownerLabel(f.paid_by)}`) : ['- 固定費なし']),
     '',
     accounts.length ? `口座数: ${accounts.length}` : '口座情報なし',
     '',
-    '本物のAIを有効化すると、この数字を根拠に、異常値・改善点・仕様変更案まで自然文で分析できます。',
+    'カテゴリー情報は使わず、金額・支払日・支払者・支払方法を中心に要約しています。',
   ].join('\n');
 }
 
@@ -123,20 +136,21 @@ function systemPrompt(mode: AiMode): string {
   const base = [
     'You are an AI assistant embedded in a Japanese household budgeting app for Toshi and Lisa.',
     'Use only the provided JSON context. Do not invent transactions, amounts, dates, or rules.',
+    'Do not use category-level analysis unless the user explicitly asks for categories.',
     'If evidence is missing or ambiguous, say so clearly.',
     'Settlement transfers and loan repayments between spouses must not be treated as income.',
     'Household expenses are split 50/50 unless the context says otherwise.',
     'Answer in Japanese, concise but specific, with yen amounts and dates when relevant.',
   ].join('\n');
-  if (mode === 'spec') {
-    return `${base}\nFocus on turning the user request into a safe implementation/spec change plan. Include affected tabs, calculation impact, risks, and verification points. Do not claim changes were applied.`;
+  if (mode === 'tab_spec') {
+    return `${base}\nFocus on turning the user request into a safe tab specification change plan. Include affected tabs, screen behavior, calculation impact, risks, and verification points. Do not claim changes were applied.`;
   }
   return `${base}\nFocus on accurate monthly financial summary, unusual movements, cashflow risks, and what to check next.`;
 }
 
 function userPrompt(mode: AiMode, question: string, context: any): string {
   return JSON.stringify({
-    task: mode === 'spec' ? '仕様変更案を作成してください' : '数字のサマリーを作成してください',
+    task: mode === 'tab_spec' ? 'タブ仕様の変更案を作成してください' : '数字のサマリーを作成してください',
     user_request: question || null,
     context,
   });
@@ -153,27 +167,39 @@ function extractText(data: any): string {
   return parts.join('\n').trim();
 }
 
+async function saveHistory(c: any, args: { month: string; mode: AiMode; question: string; answer: string; model: string; configured: boolean }) {
+  const r = await c.env.DB.prepare(
+    `INSERT INTO ai_history (month, mode, question, answer, model, configured)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(args.month, args.mode, args.question || null, args.answer, args.model, args.configured ? 1 : 0).run();
+  return r.meta.last_row_id;
+}
+
 app.get('/status', async (c) => {
   return c.json({
     configured: Boolean(c.env.OPENAI_API_KEY),
     model: c.env.OPENAI_MODEL || defaultModel,
     fallback_enabled: true,
+    history_enabled: true,
   });
+});
+
+app.get('/history', async (c) => {
+  const rows = await selectAll<any>(c.env.DB, `SELECT id, month, mode, question, answer, model, configured, created_at
+     FROM ai_history ORDER BY created_at DESC, id DESC LIMIT 50`);
+  return c.json({ items: rows });
 });
 
 app.post('/ask', async (c) => {
   const body = await c.req.json<any>();
   const month = cleanMonth(body.month);
   const mode = cleanMode(body.mode);
+  const question = String(body.question || '');
   const context = await buildContext(c, month);
   if (!c.env.OPENAI_API_KEY) {
-    return c.json({
-      month,
-      mode,
-      configured: false,
-      model: 'local-summary',
-      answer: localAnswer(mode, String(body.question || ''), context),
-    });
+    const answer = localAnswer(mode, question, context);
+    const id = await saveHistory(c, { month, mode, question, answer, model: 'local-summary', configured: false });
+    return c.json({ id, month, mode, configured: false, model: 'local-summary', answer });
   }
   const model = c.env.OPENAI_MODEL || defaultModel;
   const res = await fetch('https://api.openai.com/v1/responses', {
@@ -186,7 +212,7 @@ app.post('/ask', async (c) => {
       model,
       input: [
         { role: 'system', content: systemPrompt(mode) },
-        { role: 'user', content: userPrompt(mode, String(body.question || ''), context) },
+        { role: 'user', content: userPrompt(mode, question, context) },
       ],
       max_output_tokens: 1200,
     }),
@@ -195,7 +221,9 @@ app.post('/ask', async (c) => {
   if (!res.ok) {
     return c.json({ error: data?.error?.message || `OpenAI API error ${res.status}` }, 502);
   }
-  return c.json({ month, mode, configured: true, model, answer: extractText(data) });
+  const answer = extractText(data);
+  const id = await saveHistory(c, { month, mode, question, answer, model, configured: true });
+  return c.json({ id, month, mode, configured: true, model, answer });
 });
 
 export default app;

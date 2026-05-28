@@ -10,7 +10,7 @@ export function renderAi(root: HTMLElement) {
   const month = el('input', { type: 'month', value: thisMonth() }) as HTMLInputElement;
   const mode = el('select', {}, [
     el('option', { value: 'summary' }, [L('数字サマリー', 'Number summary')]),
-    el('option', { value: 'spec' }, [L('仕様変更案', 'Spec change plan')]),
+    el('option', { value: 'tab_spec' }, [L('タブ仕様変更', 'Tab spec change')]),
   ]) as HTMLSelectElement;
   const question = el('textarea', {
     rows: '4',
@@ -19,6 +19,28 @@ export function renderAi(root: HTMLElement) {
   }) as HTMLTextAreaElement;
   const status = el('div', { class: 'muted' });
   const output = el('pre', { class: 'ai-answer' });
+  const history = el('div', { class: 'ai-history' });
+
+  const loadHistory = async () => {
+    try {
+      const res = await api.get<{ items: any[] }>('/api/ai/history');
+      clear(history);
+      if (!res.items.length) {
+        history.appendChild(el('div', { class: 'muted' }, [L('履歴はまだありません', 'No history yet')]));
+        return;
+      }
+      for (const item of res.items) {
+        history.appendChild(el('details', { class: 'ai-history-item' }, [
+          el('summary', {}, [`${item.created_at || ''} / ${item.month} / ${item.mode}`]),
+          el('div', { class: 'muted' }, [item.question || L('依頼内容なし', 'No request')]),
+          el('pre', { class: 'ai-answer ai-history-answer' }, [item.answer || '']),
+        ]));
+      }
+    } catch (e: any) {
+      clear(history);
+      history.appendChild(el('div', { class: 'banner banner-error' }, [`${L('履歴を読めません', 'Could not load history')}: ${e.message}`]));
+    }
+  };
 
   const run = async () => {
     clear(output);
@@ -33,6 +55,7 @@ export function renderAi(root: HTMLElement) {
         ? L('AIキー未設定のため、アプリ内サマリーで表示中', 'Showing local summary because AI key is not configured')
         : `${L('使用モデル', 'Model')}: ${res.model}`;
       output.textContent = res.answer || L('回答が空でした', 'Empty answer');
+      await loadHistory();
     } catch (e: any) {
       status.textContent = `${L('AIを使えません', 'AI unavailable')}: ${e.message}`;
     }
@@ -40,7 +63,7 @@ export function renderAi(root: HTMLElement) {
 
   root.appendChild(el('section', { class: 'card soft-card ai-panel' }, [
     el('h2', {}, [L('AIアシスタント', 'AI Assistant')]),
-    el('p', { class: 'muted' }, [L('家計簿の実データをもとに、数字の要約や仕様変更案を作ります。AIは変更案を出すだけで、勝手にデータ更新はしません。', 'Summarizes numbers and drafts change plans from the app data. It does not apply changes automatically.')]),
+    el('p', { class: 'muted' }, [L('家計簿の実データをもとに、数字の要約やタブ仕様の変更案を作ります。カテゴリー分析は使わず、AIは勝手にデータ更新しません。', 'Summarizes numbers and drafts tab specification changes from the app data. Category analysis is not used, and changes are not applied automatically.')]),
     el('div', { class: 'form-grid' }, [
       el('label', {}, [L('対象月', 'Month'), month]),
       el('label', {}, [L('用途', 'Mode'), mode]),
@@ -55,4 +78,9 @@ export function renderAi(root: HTMLElement) {
     el('h3', {}, [L('回答', 'Answer')]),
     output,
   ]));
+  root.appendChild(el('section', { class: 'card soft-card' }, [
+    el('h3', {}, [L('AI履歴', 'AI History')]),
+    history,
+  ]));
+  loadHistory();
 }
