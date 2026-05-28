@@ -323,11 +323,20 @@ function cardPaymentEvents(expenses: any[]): CashEvent[] {
 }
 
 async function mortgagePaymentEvents(db: D1Database, from: string, to: string): Promise<CashEvent[]> {
-  return [];
+  const projection = await projectionFromDb(db, from, to);
+  return (projection.rows || [])
+    .filter((row: any) => Number(row.mortgage_payment || 0) > 0)
+    .map((row: any) => ({
+      date: row.payment_date,
+      owner: 'shared' as Owner,
+      amount: -Number(row.mortgage_payment || 0),
+      kind: 'payment' as const,
+      label: 'Mortgage payment',
+      source: 'mortgage_payment',
+    }));
 }
 
 function isMortgageDuplicateFixedCost(fp: any, mortgageEvents: CashEvent[]): boolean {
-  if (mortgageEvents.length === 0) return false;
   const amount = Math.abs(Number(fp.amount || 0));
   if (!amount) return false;
   const month = String(fp.month || fp.due || '').slice(0, 7);
