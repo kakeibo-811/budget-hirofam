@@ -46,6 +46,16 @@ function ownerValue(v: any): Owner {
   };
   return map[raw] || map[s] || 'other';
 }
+function monthList(from: string, to: string): string[] {
+  const out: string[] = [];
+  let cur = /^\d{4}-\d{2}$/.test(from) ? from : new Date().toISOString().slice(0, 7);
+  const end = /^\d{4}-\d{2}$/.test(to) ? to : cur;
+  for (let guard = 0; cur <= end && guard < 84; guard++) {
+    out.push(cur);
+    cur = addMonths(cur, 1);
+  }
+  return out;
+}
 
 async function getAppSettings(db: D1Database, defaults: AppSettings = dashboardSettingDefaults): Promise<AppSettings> {
   const settings = { ...defaults };
@@ -112,7 +122,7 @@ function plannedMatchesExpense(plan: any, expenses: any[]): boolean {
     if (planName && eDesc && (eDesc.includes(planName) || planName.includes(eDesc))) return true;
     if (planCategory && eCat && planCategory === eCat) return true;
     // A conservative fallback for recurring non-card payments: exact amount + payer/burden + generic recurring category.
-    if (planCategory && ['fixedcost','scheduledpayment','propertytax','earthquakeinsurance','fireinsurance','insurance','tax'].includes(planCategory)) return true;
+    if (planCategory && ['propertytax','earthquakeinsurance','fireinsurance','insurance','tax'].includes(planCategory)) return true;
     return false;
   });
 }
@@ -468,6 +478,51 @@ app.get('/cashflow/:month', async (c) => {
   const period = cycleRange(month, Number(c.req.query('cycle_start_day') || 25));
   const dash = await (await app.fetch(new Request(new URL(`/api/analytics/dashboard/${month}`, new URL(c.req.url).origin).toString()), c.env as any)).json();
   return c.json({ month, period, cashflow: (dash as any).cashflow, settlement: (dash as any).settlement });
+});
+
+app.get('/cashflow-range', async (c) => {
+  const from = c.req.query('from') || new Date().toISOString().slice(0, 7);
+  const to = c.req.query('to') || addMonths(from, 5);
+  const cycleStartDay = Number(c.req.query('cycle_start_day') || 25);
+  const months = monthList(from, to);
+  const balances = await latestBalances(c.env.DB);
+  const openingByOwner = { toshi: 0, lisa: 0, shared: 0, other: 0 } as Record<Owner, number>;
+  for (const b of balances) openingByOwner[ownerValue(b.owner)] += Number(b.balance || 0);
+  const cashEvents: CashEvent[] = [];
+  const seen = new Set<string>();
+  const pushEvent = (e: CashEvent) => {
+    const key = [e.date, e.owner, e.amount, e.source, e.label].join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    cashEvents.push(e);
+  };
+
+  for (const month of months) {
+    const period = cycleRange(month, cycleStartDay);
+    const incomeRows = await selectAll<any>(c.env.DB, `SELECT date, owner, amount, description, kind FROM incomes WHERE archived_at IS NULL AND date >= ? AND date <= ?`, [period.start, period.end]);
+    for (const x of incomeRows) pushEvent({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'income', source: String(x.kind || 'income') });
+    for (const x of await recurringIncomeOccurrences(c.env.DB, period, month)) pushEvent({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'recurring income', source: String(x.kind || 'recurring_income') });
+
+    const expenses = await selectAll<any>(c.env.DB, `SELECT e.*, c.name AS card_name, c.owner AS card_owner, c.default_paid_by AS card_default_paid_by, c.default_burden_owner AS card_default_burden_owner
+       FROM expenses e LEFT JOIN cards c ON c.id = e.card_id
+       WHERE e.archived_at IS NULL AND COALESCE(e.cycle_month, e.billing_month) = ?
+         AND LOWER(COALESCE(e.category, '')) NOT IN ('loan', 'loan_repayment')
+       ORDER BY COALESCE(e.payment_due_date, e.date) ASC, e.id ASC`, [month]);
+    const deduped = dedupePlannedAgainstActuals(expenses, await scheduledOccurrences(c.env.DB, period, month), await fixedOccurrences(c.env.DB, month));
+    for (const r of expenses) {
+      if (inferBurdenOwner(r) === 'other') continue;
+      pushEvent({ date: r.payment_due_date || r.date, owner: inferActualPayer(r), amount: -Number(r.amount || 0), kind: 'payment', label: r.description, source: 'expense' });
+    }
+    for (const sp of deduped.scheduled) pushEvent({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
+    for (const fp of deduped.fixed) pushEvent({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
+  }
+
+  const forecasts = {
+    toshi: makeForecast('toshi', cashEvents, openingByOwner.toshi),
+    lisa: makeForecast('lisa', cashEvents, openingByOwner.lisa),
+    shared: makeForecast('shared', cashEvents, openingByOwner.shared),
+  };
+  return c.json({ from, to, months, account_balances: balances, forecasts, events: cashEvents.sort((a, b) => a.date.localeCompare(b.date)) });
 });
 
 app.get('/timeline', async (c) => {

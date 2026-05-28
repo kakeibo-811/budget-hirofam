@@ -9,12 +9,13 @@ import { renderFixed } from './tabs/fixed';
 import { renderSettlements } from './tabs/settlements';
 import { renderAssets } from './tabs/assets';
 import { renderAnalytics } from './tabs/analytics';
+import { renderTimeline } from './tabs/timeline';
 import { renderTutorial } from './tabs/tutorial';
 import { renderSettings, renderDiag } from './tabs/settings-and-diag';
 
 type TabKey =
   | 'dashboard' | 'expenses' | 'cards' | 'accounts' | 'incomes'
-  | 'fixed' | 'settle' | 'assets' | 'analytics'
+  | 'fixed' | 'settle' | 'assets' | 'analytics' | 'timeline'
   | 'tutorial' | 'settings' | 'diag';
 
 const defaultTabs: { key: TabKey; icon: string; label: string; render: (root: HTMLElement) => void }[] = [
@@ -27,6 +28,7 @@ const defaultTabs: { key: TabKey; icon: string; label: string; render: (root: HT
   { key: 'fixed',     icon: '📌', label: 'tab.fixed',     render: renderFixed },
   { key: 'assets',    icon: '🏘️', label: 'tab.assets',    render: renderAssets },
   { key: 'analytics', icon: '📊', label: 'tab.analytics', render: renderAnalytics },
+  { key: 'timeline',  icon: '📈', label: 'tab.timeline',  render: renderTimeline },
   { key: 'tutorial',  icon: '❓', label: 'tab.tutorial',  render: renderTutorial },
   { key: 'settings',  icon: '⚙️', label: 'tab.settings',  render: renderSettings },
   { key: 'diag',      icon: '🩺', label: 'tab.diag',      render: renderDiag },

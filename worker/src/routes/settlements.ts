@@ -31,7 +31,7 @@ function plannedMatchesExpense(plan: any, expenses: any[]): boolean {
     const cat = compactText(e.category || '');
     if (name && desc && (desc.includes(name) || name.includes(desc))) return true;
     if (category && cat && category === cat) return true;
-    if (category && ['fixedcost','scheduledpayment','propertytax','earthquakeinsurance','fireinsurance','insurance','tax'].includes(category)) return true;
+    if (category && ['propertytax','earthquakeinsurance','fireinsurance','insurance','tax'].includes(category)) return true;
     return false;
   });
 }
