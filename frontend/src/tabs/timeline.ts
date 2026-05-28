@@ -223,7 +223,7 @@ function timelineCard(owner: OwnerKey, rows: any[], refresh: () => void): HTMLEl
       el('td', { 'data-label': L('\u5185\u5bb9', 'Label') }, [r.label || r.source || '']),
       el('td', { class: 'num timeline-delta', 'data-label': L('\u5897\u6e1b', 'Delta') }, [formatYen(r.amount || 0)]),
       el('td', { class: 'num timeline-balance', 'data-label': L('\u6b8b\u9ad8', 'Balance') }, [formatYen(r.balance_after || 0)]),
-      el('td', { 'data-label': L('\u64cd\u4f5c', 'Action') }, [timelineDeleteButton(r, refresh)]),
+      el('td', { 'data-label': L('\u64cd\u4f5c', 'Action') }, [timelineActions(r, refresh)]),
     ]));
   }
   table.appendChild(tb);
@@ -231,6 +231,38 @@ function timelineCard(owner: OwnerKey, rows: any[], refresh: () => void): HTMLEl
   card.appendChild(wrap);
   card.appendChild(timelineMobileList(rows, refresh));
   return card;
+}
+
+function timelineActions(row: any, refresh: () => void): HTMLElement {
+  const date = el('input', { type: 'date', value: row.date || '', class: 'timeline-date-input', title: L('支払日', 'Payment date') }) as HTMLInputElement;
+  const saveDate = el('button', {
+    class: 'btn ghost timeline-date-save',
+    type: 'button',
+    title: L('支払日を変更', 'Change payment date'),
+    onClick: async () => {
+      try {
+        if (!date.value) return;
+        if (row.manual_id) {
+          await api.patch<any>(`/api/analytics/timeline-events/${row.manual_id}`, { date: date.value });
+        } else {
+          await api.post<any>('/api/analytics/timeline-date-change', {
+            event_key: row.event_key,
+            old_date: row.date,
+            new_date: date.value,
+            owner: row.owner,
+            amount: row.amount,
+            kind: row.kind,
+            label: row.label || row.source,
+            source: row.source,
+          });
+        }
+        await refresh();
+      } catch (e: any) {
+        alert(`${L('日付変更失敗', 'Date change failed')}: ${e.message}`);
+      }
+    },
+  }, [L('変更', 'Save')]);
+  return el('div', { class: 'timeline-actions' }, [date, saveDate, timelineDeleteButton(row, refresh)]);
 }
 
 function timelineDeleteButton(row: any, refresh: () => void): HTMLElement {
@@ -279,7 +311,7 @@ function timelineMobileList(rows: any[], refresh: () => void): HTMLElement {
         el('span', {}, [L('\u5897\u6e1b\u5f8c\u6b8b\u9ad8', 'Balance after delta')]),
         el('strong', {}, [formatYen(balance)]),
       ]),
-      el('div', { class: 'timeline-mobile-actions' }, [timelineDeleteButton(r, refresh)]),
+      el('div', { class: 'timeline-mobile-actions' }, [timelineActions(r, refresh)]),
     ]));
   }
   return list;

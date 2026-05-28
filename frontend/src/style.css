@@ -2247,6 +2247,24 @@ textarea {
   line-height: 1;
 }
 
+.timeline-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.timeline-date-input {
+  width: 138px;
+  min-height: 32px;
+}
+
+.timeline-date-save {
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
 .timeline-table-wrap {
   max-width: 100%;
 }
@@ -2328,6 +2346,16 @@ textarea {
   .timeline-mobile-actions {
     display: flex;
     justify-content: flex-end;
+  }
+
+  .timeline-mobile-actions .timeline-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .timeline-mobile-actions .timeline-date-input {
+    flex: 1 1 150px;
+    min-width: 0;
   }
 
   .timeline-positive {

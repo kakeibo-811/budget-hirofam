@@ -653,6 +653,46 @@ app.post('/timeline-events', async (c) => {
   return c.json({ id: r.meta.last_row_id }, 201);
 });
 
+app.patch('/timeline-events/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const b = await c.req.json<any>();
+  const fields: string[] = [];
+  const values: any[] = [];
+  if ('date' in b || 'event_date' in b) {
+    const date = cleanDate(b.date || b.event_date);
+    if (!date) return c.json({ error: 'valid date is required' }, 400);
+    fields.push('event_date = ?');
+    values.push(date);
+  }
+  if ('owner' in b) {
+    fields.push('owner = ?');
+    values.push(cleanOwner(b.owner));
+  }
+  if ('amount' in b) {
+    const amount = Math.round(Number(b.amount || 0));
+    if (!Number.isFinite(amount) || amount === 0) return c.json({ error: 'non-zero amount is required' }, 400);
+    fields.push('amount = ?');
+    values.push(amount);
+    fields.push('kind = ?');
+    values.push(amount > 0 ? 'income' : cleanKind(b.kind));
+  }
+  if ('label' in b) {
+    const label = String(b.label || '').trim();
+    if (!label) return c.json({ error: 'label is required' }, 400);
+    fields.push('label = ?');
+    values.push(label);
+  }
+  if ('note' in b) {
+    fields.push('note = ?');
+    values.push(b.note || null);
+  }
+  if (fields.length === 0) return c.json({ error: 'no fields' }, 400);
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+  await exec(c.env.DB, `UPDATE timeline_manual_events SET ${fields.join(', ')} WHERE id = ? AND archived_at IS NULL`, values);
+  return c.json({ ok: true });
+});
+
 app.delete('/timeline-events/:id', async (c) => {
   await exec(c.env.DB, `UPDATE timeline_manual_events SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [Number(c.req.param('id'))]);
   return c.json({ ok: true });
@@ -683,6 +723,52 @@ app.post('/timeline-suppressions', async (c) => {
     b.note || null
   ).run();
   return c.json({ ok: true });
+});
+
+app.post('/timeline-date-change', async (c) => {
+  const b = await c.req.json<any>();
+  const date = cleanDate(b.new_date || b.date || b.event_date);
+  if (!date) return c.json({ error: 'valid new_date is required' }, 400);
+  const eventKey = String(b.event_key || '').trim();
+  const amount = Math.round(Number(b.amount || 0));
+  if (!eventKey) return c.json({ error: 'event_key is required' }, 400);
+  if (!Number.isFinite(amount) || amount === 0) return c.json({ error: 'non-zero amount is required' }, 400);
+  const label = String(b.label || b.source || '').trim();
+  if (!label) return c.json({ error: 'label is required' }, 400);
+
+  await c.env.DB.prepare(
+    `INSERT INTO timeline_event_suppressions (event_key, source, label, event_date, owner, amount, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(event_key) WHERE archived_at IS NULL DO UPDATE SET
+       source = excluded.source,
+       label = excluded.label,
+       event_date = excluded.event_date,
+       owner = excluded.owner,
+       amount = excluded.amount,
+       note = excluded.note,
+       updated_at = CURRENT_TIMESTAMP`
+  ).bind(
+    eventKey,
+    b.source || null,
+    label,
+    cleanDate(b.old_date || b.date || b.event_date),
+    b.owner ? cleanOwner(b.owner) : null,
+    amount,
+    'Timeline date changed'
+  ).run();
+
+  const r = await c.env.DB.prepare(
+    `INSERT INTO timeline_manual_events (event_date, owner, amount, kind, label, note)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    date,
+    cleanOwner(b.owner),
+    amount,
+    amount > 0 ? 'income' : cleanKind(b.kind),
+    label,
+    `Moved from ${b.old_date || b.date || ''}`
+  ).run();
+  return c.json({ ok: true, id: r.meta.last_row_id }, 201);
 });
 
 app.get('/timeline', async (c) => {
