@@ -322,6 +322,20 @@ function cardPaymentEvents(expenses: any[]): CashEvent[] {
   return Array.from(grouped.values()).map(({ count, ...event }) => event);
 }
 
+async function mortgagePaymentEvents(db: D1Database, from: string, to: string): Promise<CashEvent[]> {
+  const projection = await projectionFromDb(db, from, to);
+  return (projection.rows || [])
+    .filter((row: any) => Number(row.mortgage_payment || 0) > 0)
+    .map((row: any) => ({
+      date: row.payment_date,
+      owner: 'shared' as Owner,
+      amount: -Number(row.mortgage_payment || 0),
+      kind: 'payment' as const,
+      label: 'Mortgage payment',
+      source: 'mortgage_payment',
+    }));
+}
+
 app.get('/dashboard/:month', async (c) => {
   const month = c.req.param('month');
   const appSettings = await getAppSettings(c.env.DB);
@@ -499,6 +513,7 @@ app.get('/dashboard/:month', async (c) => {
   }
   for (const sp of sched) cashEvents.push({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
   for (const fp of fixedPlans) cashEvents.push({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
+  for (const mp of await mortgagePaymentEvents(c.env.DB, month, month)) cashEvents.push(mp);
   const forecasts = {
     toshi: makeForecast('toshi', cashEvents, openingByOwner.toshi),
     lisa: makeForecast('lisa', cashEvents, openingByOwner.lisa),
@@ -586,6 +601,7 @@ app.get('/cashflow-range', async (c) => {
     for (const sp of deduped.scheduled) pushEvent({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
     for (const fp of deduped.fixed) pushEvent({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
   }
+  for (const mp of await mortgagePaymentEvents(c.env.DB, from, to)) pushEvent(mp);
 
   const forecasts = {
     toshi: makeForecast('toshi', cashEvents, openingByOwner.toshi),
