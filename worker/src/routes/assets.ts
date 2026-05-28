@@ -325,6 +325,21 @@ async function putSetting(db: D1Database, key: string, value: string, note?: str
   ).bind(key, value, note ?? null).run();
 }
 
+async function syncMortgageFixedCostPayDay(db: D1Database, payDay: number) {
+  const day = Math.max(1, Math.min(31, Math.round(payDay || 1)));
+  const matcher = `(name LIKE '%住宅%' OR name LIKE '%ローン%' OR LOWER(name) LIKE '%loan%' OR LOWER(name) LIKE '%mortgage%')`;
+  await db.prepare(
+    `UPDATE fixed_costs SET pay_day = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE archived_at IS NULL AND ${matcher}`
+  ).bind(day).run();
+  await db.prepare(
+    `UPDATE fixed_cost_snapshots
+     SET payment_due_date = printf('%s-%02d', month, ?)
+     WHERE locked = 0
+       AND fixed_cost_id IN (SELECT id FROM fixed_costs WHERE archived_at IS NULL AND ${matcher})`
+  ).bind(day).run();
+}
+
 async function getEvents(db: D1Database, fromMonth: string, toMonth: string): Promise<AssetRebuildEvent[]> {
   return await selectAll<AssetRebuildEvent>(db,
     `SELECT * FROM asset_rebuild_events
@@ -597,14 +612,22 @@ app.get('/settings', async (c) => {
 
 app.put('/settings', async (c) => {
   const body = await c.req.json<{ items?: Record<string, string | number>; key?: string; value?: string | number }>();
+  const changedKeys = new Set<string>();
   if (body.items) {
-    for (const [k, v] of Object.entries(body.items)) await putSettingWithAliases(c.env.DB, k, String(v));
+    for (const [k, v] of Object.entries(body.items)) {
+      await putSettingWithAliases(c.env.DB, k, String(v));
+      changedKeys.add(canonicalSettingKey(k));
+    }
   } else if (body.key) {
     await putSettingWithAliases(c.env.DB, body.key, String(body.value ?? ''));
+    changedKeys.add(canonicalSettingKey(body.key));
   } else {
     return c.json({ error: 'items or key is required' }, 400);
   }
   const settings = await getSettings(c.env.DB);
+  if (changedKeys.has('loan_repayment_day')) {
+    await syncMortgageFixedCostPayDay(c.env.DB, Number(settings.loan_repayment_day || defaultSettings.loan_repayment_day));
+  }
   const from = fmtMonth(settings.plan_start_date || defaultSettings.plan_start_date);
   const to = settings.projection_end_month || defaultSettings.projection_end_month;
   const projection = await projectionFromDb(c.env.DB, from, to, 'mortgage_schedule_1_19');
