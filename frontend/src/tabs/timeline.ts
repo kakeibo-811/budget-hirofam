@@ -111,7 +111,15 @@ function accountBalanceEditor(account: any, owner: OwnerKey, refresh: () => void
     type: 'button',
     onClick: async () => {
       try {
-        const next = Number(amount.value || 0);
+        if (amount.value.trim() === '') {
+          status.textContent = L('\u6b8b\u9ad8\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044', 'Enter a balance');
+          return;
+        }
+        const next = Number(amount.value);
+        if (!Number.isFinite(next)) {
+          status.textContent = L('\u6b8b\u9ad8\u306f\u6570\u5b57\u3067\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044', 'Balance must be a number');
+          return;
+        }
         status.textContent = L('\u4fdd\u5b58\u4e2d...', 'Saving...');
         if (owner === 'shared' || account.shared_balance_source === 'repair_reserve_projection') {
           await api.post<any>('/api/assets/events', {
