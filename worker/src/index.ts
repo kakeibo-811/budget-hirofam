@@ -19,6 +19,7 @@ import scheduledPaymentsRoute from './routes/scheduled-payments';
 import commandsRoute from './routes/commands';
 import investmentsRoute from './routes/investments';
 import bulkOpsRoute from './routes/bulk-ops';
+import aiRoute from './routes/ai';
 
 export type Env = {
   DB: D1Database;
@@ -29,6 +30,8 @@ export type Env = {
   WRITE_ENABLED: string;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
 };
 
 export type Variables = {
@@ -95,6 +98,7 @@ app.route('/api/scheduled-payments', scheduledPaymentsRoute);
 app.route('/api/commands', commandsRoute);
 app.route('/api/investments', investmentsRoute);
 app.route('/api/bulk', bulkOpsRoute);
+app.route('/api/ai', aiRoute);
 app.get('/api/deploy-marker', (c) => c.json({
   marker: 'DEPLOY_MARKER_20260509_PHASE14_ALL_IN_ONE',
   message: 'Phase14 all-in-one worker code is deployed.',

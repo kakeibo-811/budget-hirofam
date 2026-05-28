@@ -2265,6 +2265,38 @@ textarea {
   padding: 4px 10px;
 }
 
+.ai-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ai-question-wrap {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-question {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.ai-answer {
+  margin: 0;
+  padding: 14px;
+  min-height: 180px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.6;
+}
+
 .timeline-table-wrap {
   max-width: 100%;
 }
