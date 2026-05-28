@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Env, Variables } from '../index';
 import { selectAll, selectOne } from '../db/helpers';
+import { projectionFromDb } from './assets';
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -248,6 +249,40 @@ async function latestBalances(db: D1Database) {
      WHERE a.archived_at IS NULL ORDER BY a.sort_order ASC, a.id ASC`);
 }
 
+async function repairReserveBalance(db: D1Database, month: string): Promise<{ balance: number; as_of_date: string | null }> {
+  const projection = await projectionFromDb(db, month, month);
+  const row = projection.rows[0];
+  return {
+    balance: Math.round(Number(row?.repair_reserve_balance || 0)),
+    as_of_date: row?.payment_date || null,
+  };
+}
+
+function applySharedRepairReserveBalance(balances: any[], repair: { balance: number; as_of_date: string | null }): any[] {
+  let used = false;
+  const rows = balances.map((b) => {
+    if (ownerValue(b.owner) !== 'shared') return b;
+    if (used) return { ...b, balance: 0, shared_balance_source: 'repair_reserve_projection_secondary' };
+    used = true;
+    return {
+      ...b,
+      balance: repair.balance,
+      as_of_date: repair.as_of_date || b.as_of_date,
+      shared_balance_source: 'repair_reserve_projection',
+    };
+  });
+  if (!used) rows.push({
+    id: null,
+    name: 'Repair reserve',
+    owner: 'shared',
+    kind: 'repair_reserve',
+    balance: repair.balance,
+    as_of_date: repair.as_of_date,
+    shared_balance_source: 'repair_reserve_projection',
+  });
+  return rows;
+}
+
 function makeForecast(owner: Owner, events: CashEvent[], opening: number) {
   const sorted = events.filter((e) => e.owner === owner).sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
   let balance = opening;
@@ -413,7 +448,9 @@ app.get('/dashboard/:month', async (c) => {
     household_contribution_received_by_wife: wifeTransferLines.filter((x) => x.reason === 'household_contribution_received_by_wife').reduce((a, x) => a + Math.max(0, Number(x.wife_due_amount || 0)), 0),
   };
 
-  const balances = await latestBalances(c.env.DB);
+  const rawBalances = await latestBalances(c.env.DB);
+  const repair = await repairReserveBalance(c.env.DB, month);
+  const balances = applySharedRepairReserveBalance(rawBalances, repair);
   const investmentSummary = await selectOne<any>(c.env.DB, `SELECT
        COALESCE(SUM(quantity * COALESCE(manual_price, average_cost, 0)), 0) AS total,
        COALESCE(SUM(quantity * COALESCE(average_cost, 0)), 0) AS cost,
@@ -485,7 +522,9 @@ app.get('/cashflow-range', async (c) => {
   const to = c.req.query('to') || addMonths(from, 5);
   const cycleStartDay = Number(c.req.query('cycle_start_day') || 25);
   const months = monthList(from, to);
-  const balances = await latestBalances(c.env.DB);
+  const rawBalances = await latestBalances(c.env.DB);
+  const repair = await repairReserveBalance(c.env.DB, from);
+  const balances = applySharedRepairReserveBalance(rawBalances, repair);
   const openingByOwner = { toshi: 0, lisa: 0, shared: 0, other: 0 } as Record<Owner, number>;
   for (const b of balances) openingByOwner[ownerValue(b.owner)] += Number(b.balance || 0);
   const cashEvents: CashEvent[] = [];

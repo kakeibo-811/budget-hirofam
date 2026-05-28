@@ -85,47 +85,67 @@ function ownerBalanceCard(owner: OwnerKey, accounts: any[], refresh: () => void)
     el('summary', {}, [`${ownerLabel(owner)} ${formatYen(total)}`]),
     el('p', { class: 'muted' }, [ownerHelp(owner)]),
   ]);
+  if (owner === 'shared') {
+    box.appendChild(el('p', { class: 'muted' }, [L('\u5171\u901a\u53e3\u5ea7\u306e\u6b8b\u9ad8\u306f\u3001\u8cc7\u7523\u30fb\u8ca0\u50b5\u30bf\u30d6\u306e\u4fee\u7e55\u7a4d\u7acb\u91d1\u3068\u540c\u3058\u5024\u3092\u4f7f\u3044\u307e\u3059\u3002', 'Shared account balance uses the same value as the repair reserve in Assets & Liabilities.')]));
+  }
   if (!accounts.length) {
     box.appendChild(el('div', { class: 'muted' }, [L('\u53e3\u5ea7\u304c\u3042\u308a\u307e\u305b\u3093', 'No accounts')]));
     return box;
   }
-  const wrap = el('div', { class: 'table-wrap' });
-  const table = el('table', { class: 'data compact-table' });
-  table.innerHTML = `<thead><tr><th>${L('\u53e3\u5ea7', 'Account')}</th><th class="num">${L('\u73fe\u5728\u6b8b\u9ad8', 'Current balance')}</th><th>${L('\u57fa\u6e96\u65e5', 'As of')}</th><th>${L('\u6b8b\u9ad8\u4fee\u6b63', 'Adjust balance')}</th></tr></thead>`;
-  const tb = el('tbody');
+  const list = el('div', { class: 'form-grid' });
   for (const account of accounts) {
-    tb.appendChild(accountBalanceRow(account, refresh));
+    list.appendChild(accountBalanceEditor(account, owner, refresh));
   }
-  table.appendChild(tb);
-  wrap.appendChild(table);
-  box.appendChild(wrap);
+  box.appendChild(list);
   return box;
 }
 
-function accountBalanceRow(account: any, refresh: () => void): HTMLElement {
+function accountBalanceEditor(account: any, owner: OwnerKey, refresh: () => void): HTMLElement {
+  const current = Number(account.balance || 0);
   const date = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10) }) as HTMLInputElement;
-  const amount = el('input', { type: 'number', inputmode: 'numeric', value: String(account.balance ?? 0), class: 'num' }) as HTMLInputElement;
+  const amount = el('input', { type: 'number', inputmode: 'numeric', value: String(current), class: 'wide-input' }) as HTMLInputElement;
   const note = el('input', { type: 'text', placeholder: L('\u4efb\u610f\u30e1\u30e2', 'Optional note') }) as HTMLInputElement;
   const status = el('div', { class: 'muted' });
   const save = el('button', {
-    class: 'btn btn-small',
+    class: 'btn',
     type: 'button',
     onClick: async () => {
-      status.textContent = L('\u4fdd\u5b58\u4e2d...', 'Saving...');
-      await api.post<any>(`/api/accounts/${account.id}/adjust`, {
-        as_of_date: date.value,
-        balance: Number(amount.value || 0),
-        note: note.value || null,
-      });
-      status.textContent = L('\u4fdd\u5b58\u3057\u307e\u3057\u305f', 'Saved');
-      await refresh();
+      try {
+        const next = Number(amount.value || 0);
+        status.textContent = L('\u4fdd\u5b58\u4e2d...', 'Saving...');
+        if (owner === 'shared' || account.shared_balance_source === 'repair_reserve_projection') {
+          await api.post<any>('/api/assets/events', {
+            target: 'repair_reserve',
+            event_type: 'balance_adjustment',
+            event_date: date.value,
+            amount: next - current,
+            paid_by: 'shared',
+            burden_owner: 'shared',
+            note: note.value || L('\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u304b\u3089\u4fee\u7e55\u7a4d\u7acb\u91d1\u6b8b\u9ad8\u3092\u4fee\u6b63', 'Repair reserve balance adjusted from timeline'),
+          });
+        } else {
+          await api.post<any>(`/api/accounts/${account.id}/adjust`, {
+            as_of_date: date.value,
+            balance: next,
+            note: note.value || null,
+          });
+        }
+        status.textContent = L('\u4fdd\u5b58\u3057\u307e\u3057\u305f', 'Saved');
+        await refresh();
+      } catch (e: any) {
+        status.textContent = `${L('\u4fdd\u5b58\u5931\u6557', 'Save failed')}: ${e.message}`;
+      }
     },
   }, [L('\u4fdd\u5b58', 'Save')]);
-  return el('tr', {}, [
-    el('td', {}, [account.name || `#${account.id}`]),
-    el('td', { class: 'num' }, [account.balance == null ? '-' : formatYen(account.balance)]),
-    el('td', {}, [account.as_of_date || '-']),
-    el('td', {}, [el('div', { class: 'row-flex' }, [date, amount, note, save]), status]),
+  return el('div', { class: 'timeline-balance-editor' }, [
+    el('h4', {}, [account.name || (owner === 'shared' ? L('\u4fee\u7e55\u7a4d\u7acb\u91d1', 'Repair reserve') : `#${account.id}`)]),
+    el('div', { class: 'metric-value' }, [formatYen(current)]),
+    el('div', { class: 'muted' }, [`${L('\u57fa\u6e96\u65e5', 'As of')}: ${account.as_of_date || '-'}`]),
+    el('label', {}, [L('\u4fee\u6b63\u65e5', 'Adjustment date'), date]),
+    el('label', {}, [L('\u4fee\u6b63\u5f8c\u6b8b\u9ad8', 'New balance'), amount]),
+    el('label', {}, [L('\u30e1\u30e2', 'Note'), note]),
+    save,
+    status,
   ]);
 }
 

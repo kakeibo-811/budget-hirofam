@@ -525,7 +525,7 @@ async function repairReserveScheduledDeductions(db: D1Database, from: string, to
   return map;
 }
 
-async function projectionFromDb(db: D1Database, from: string, to: string, scheduleSource = 'mortgage_schedule_1_19'): Promise<{ settings: AssetSettings; rows: ProjectionRow[]; events: AssetRebuildEvent[]; mortgage_count: number; scheduled_deductions: any[] }> {
+export async function projectionFromDb(db: D1Database, from: string, to: string, scheduleSource = 'mortgage_schedule_1_19'): Promise<{ settings: AssetSettings; rows: ProjectionRow[]; events: AssetRebuildEvent[]; mortgage_count: number; scheduled_deductions: any[] }> {
   const settings = await getSettings(db);
   const events = await getEvents(db, fmtMonth(settings.plan_start_date || defaultSettings.plan_start_date), to);
   const mortgageRows = await getMortgageRows(db, scheduleSource, fmtMonth(settings.plan_start_date || defaultSettings.plan_start_date), to);
