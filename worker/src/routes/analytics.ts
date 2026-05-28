@@ -336,6 +336,16 @@ async function mortgagePaymentEvents(db: D1Database, from: string, to: string): 
     }));
 }
 
+function isMortgageDuplicateFixedCost(fp: any, mortgageEvents: CashEvent[]): boolean {
+  const amount = Math.abs(Number(fp.amount || 0));
+  if (!amount) return false;
+  const month = String(fp.month || fp.due || '').slice(0, 7);
+  const name = compactText(fp.name || fp.category || '');
+  const namedMortgage = name.includes('mortgage') || name.includes('homeloan') || name.includes('住宅ローン') || name.includes('住宅');
+  const sameMortgageAmount = mortgageEvents.some((e) => e.date.slice(0, 7) === month && Math.abs(Number(e.amount || 0)) === amount);
+  return sameMortgageAmount && (namedMortgage || ownerValue(fp.burden_owner || fp.owner) === 'shared');
+}
+
 app.get('/dashboard/:month', async (c) => {
   const month = c.req.param('month');
   const appSettings = await getAppSettings(c.env.DB);
@@ -511,9 +521,13 @@ app.get('/dashboard/:month', async (c) => {
     if (burden === 'other') continue;
     cashEvents.push({ date: r.payment_due_date || r.date, owner: inferActualPayer(r), amount: -Number(r.amount || 0), kind: 'payment', label: r.description, source: 'expense' });
   }
+  const mortgageEvents = await mortgagePaymentEvents(c.env.DB, month, month);
   for (const sp of sched) cashEvents.push({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
-  for (const fp of fixedPlans) cashEvents.push({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
-  for (const mp of await mortgagePaymentEvents(c.env.DB, month, month)) cashEvents.push(mp);
+  for (const fp of fixedPlans) {
+    if (isMortgageDuplicateFixedCost(fp, mortgageEvents)) continue;
+    cashEvents.push({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
+  }
+  for (const mp of mortgageEvents) cashEvents.push(mp);
   const forecasts = {
     toshi: makeForecast('toshi', cashEvents, openingByOwner.toshi),
     lisa: makeForecast('lisa', cashEvents, openingByOwner.lisa),
@@ -598,8 +612,12 @@ app.get('/cashflow-range', async (c) => {
       if (inferBurdenOwner(r) === 'other') continue;
       pushEvent({ date: r.payment_due_date || r.date, owner: inferActualPayer(r), amount: -Number(r.amount || 0), kind: 'payment', label: r.description, source: 'expense' });
     }
+    const monthMortgageEvents = await mortgagePaymentEvents(c.env.DB, month, month);
     for (const sp of deduped.scheduled) pushEvent({ date: sp.due, owner: ownerValue(sp.paid_by), amount: -Number(sp.amount || 0), kind: 'payment', label: sp.name, source: 'scheduled_payment' });
-    for (const fp of deduped.fixed) pushEvent({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
+    for (const fp of deduped.fixed) {
+      if (isMortgageDuplicateFixedCost(fp, monthMortgageEvents)) continue;
+      pushEvent({ date: fp.due, owner: ownerValue(fp.paid_by || 'toshi'), amount: -Number(fp.amount || 0), kind: 'payment', label: fp.name, source: 'fixed_cost' });
+    }
   }
   for (const mp of await mortgagePaymentEvents(c.env.DB, from, to)) pushEvent(mp);
 
