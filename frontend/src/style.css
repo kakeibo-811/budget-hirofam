@@ -934,7 +934,7 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
 .metric-warning { border-color: #ffd1d8; background: #fff1f3; }
 .metric-ok { border-color: #c7f5d9; background: #effdf4; }
 .danger-text { color: #d63d59; font-size: 12px; font-weight: 700; }
-.analytics-hero { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; margin-bottom: 16px; padding: 20px; border-radius: 22px; background: linear-gradient(135deg, var(--card), color-mix(in srgb, var(--accent) 7%, var(--card))); box-shadow: var(--shadow); }
+.analytics-hero { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: start; margin-bottom: 16px; padding: 20px; border-radius: 22px; background: linear-gradient(135deg, color-mix(in srgb, var(--card) 88%, #ffffff 12%), color-mix(in srgb, var(--accent) 8%, var(--card))); box-shadow: var(--shadow); border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--line)); }
 .analytics-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 16px; }
 .range-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 12px; }
 .pill-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -957,14 +957,15 @@ textarea { width: 100%; max-width: 100%; box-sizing: border-box; min-height: 120
 .compact-form .field span { font-size: 12px; color: var(--muted); }
 .compact-form input, .compact-form select { min-width: 0; }
 .trend-bars { display:grid; gap: 10px; margin: 12px 0 18px; }
-.trend-row { display:grid; grid-template-columns: 72px repeat(4, minmax(120px, 1fr)); gap: 8px; align-items:center; }
-.trend-month { font-weight: 700; color: var(--muted); }
-.mini-bar { position: relative; height: 28px; background: color-mix(in srgb, var(--card, #fff) 70%, var(--accent, #ff8aa0)); border: 1px solid var(--line); border-radius: 999px; overflow:hidden; white-space:nowrap; }
-.mini-bar span { display:block; height:100%; background: color-mix(in srgb, var(--accent, #ff8aa0) 35%, transparent); border-radius:999px; }
-.mini-bar em { position:absolute; inset:0; display:flex; align-items:center; padding-left:10px; font-size:12px; font-style:normal; font-weight:700; color: var(--text); }
+.trend-row { display:grid; grid-template-columns: 84px repeat(4, minmax(118px, 1fr)); gap: 8px; align-items:center; }
+.trend-month { min-width: 0; font-weight: 800; color: var(--muted); font-family: var(--font-num); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.mini-bar { position: relative; height: 30px; background: color-mix(in srgb, var(--card, #fff) 74%, var(--accent, #ff8aa0)); border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line)); border-radius: 999px; overflow:hidden; white-space:nowrap; box-shadow: inset 0 1px 0 rgba(255,255,255,.55); }
+.mini-bar span { display:block; height:100%; background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #ff8aa0) 42%, transparent), color-mix(in srgb, var(--positive, #44b678) 28%, transparent)); border-radius:999px; }
+.mini-bar em { position:absolute; inset:0; display:flex; align-items:center; min-width:0; padding: 0 10px; font-size:12px; font-style:normal; font-weight:800; color: var(--text); overflow:hidden; text-overflow:ellipsis; }
 @media (max-width: 760px) {
-  .trend-row { grid-template-columns: 64px minmax(130px, 1fr); }
-  .trend-row .mini-bar:nth-child(n+4) { grid-column: 2; }
+  .trend-row { grid-template-columns: 72px minmax(0, 1fr); align-items:start; }
+  .trend-row .mini-bar { grid-column: 2; }
+  .trend-month { grid-column: 1; grid-row: 1 / span 4; padding-top: 7px; }
   .action-cell { min-width: 220px; }
 }
 
@@ -1097,28 +1098,33 @@ button.btn-small {
 }
 .soft-table th:first-child { border-top-left-radius: var(--radius-md); }
 .soft-table th:last-child { border-top-right-radius: var(--radius-md); }
-.analytics-visual-card { overflow: hidden; }
+.analytics-visual-card { overflow: hidden; border-color: color-mix(in srgb, var(--accent) 16%, var(--border)); }
 .section-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom: 10px; }
 .chart-wrap {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 92%, var(--accent) 8%), var(--bg-card));
-  padding: 10px;
+  background:
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--positive) 12%, transparent), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 90%, var(--accent) 10%), var(--bg-card));
+  padding: 12px;
   margin: 10px 0;
 }
 .chart-wrap svg { width: 100%; min-width: 660px; display:block; }
+.analytics-chart-svg { filter: drop-shadow(0 12px 18px rgba(20, 24, 40, .08)); }
 .chart-wrap-compact { margin-top: 14px; }
 .chart-wrap h4 { margin: 4px 4px 8px; font-size: 13px; color: var(--text); }
 .chart-axis { stroke: var(--border-strong); stroke-width: 1; }
+.chart-grid { stroke: color-mix(in srgb, var(--border) 72%, transparent); stroke-width: 1; stroke-dasharray: 3 8; }
 .chart-label { fill: var(--text-muted); font-size: 11px; font-family: var(--font-num); }
-.chart-bar { opacity: .86; }
+.chart-bar { opacity: .92; transition: opacity .15s ease, transform .15s ease; }
+.chart-bar:hover { opacity: 1; transform: translateY(-1px); }
 .chart-income-h { fill: color-mix(in srgb, var(--positive) 72%, white 12%); background: color-mix(in srgb, var(--positive) 72%, white 12%); }
 .chart-out-h { fill: color-mix(in srgb, var(--accent) 72%, white 10%); background: color-mix(in srgb, var(--accent) 72%, white 10%); }
-.chart-income-w { fill: color-mix(in srgb, #8b7cf6 78%, white 10%); background: color-mix(in srgb, #8b7cf6 78%, white 10%); }
-.chart-out-w { fill: color-mix(in srgb, var(--warning) 82%, white 10%); background: color-mix(in srgb, var(--warning) 82%, white 10%); }
+.chart-income-w { fill: color-mix(in srgb, #6f8df6 78%, white 10%); background: color-mix(in srgb, #6f8df6 78%, white 10%); }
+.chart-out-w { fill: color-mix(in srgb, #f3a34f 82%, white 10%); background: color-mix(in srgb, #f3a34f 82%, white 10%); }
 .chart-line { stroke: var(--accent); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 6px 8px color-mix(in srgb, var(--accent) 25%, transparent)); }
 .chart-dot { fill: var(--bg-card); stroke: var(--accent); stroke-width: 3; }
 .chart-legend { display:flex; flex-wrap:wrap; gap:10px 14px; padding: 6px 4px 2px; font-size: 12px; color: var(--text-muted); }

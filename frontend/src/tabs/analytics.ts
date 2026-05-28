@@ -100,14 +100,21 @@ function svgEl(tag: string, attrs: Record<string, any> = {}): SVGElement {
 
 function stackedSvg(items: Dash[]): HTMLElement {
   const wrap = el('div', { class: 'chart-wrap' });
-  const width = 760, height = 260, pad = 34;
+  const width = 820, height = 300, padX = 42, padTop = 28, padBottom = 42;
+  const plotH = height - padTop - padBottom;
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, role: 'img', 'aria-label': L('月次収支棒グラフ', 'Monthly income and outgo bar chart') }) as SVGSVGElement;
+  svg.setAttribute('class', 'analytics-chart-svg');
   const max = Math.max(1, ...items.flatMap((d) => [d.income?.toshi || 0, d.income?.lisa || 0, d.settlement?.husband_final_burden || 0, d.household?.total || 0]));
-  const groupW = (width - pad * 2) / Math.max(1, items.length);
-  svg.appendChild(svgEl('line', { x1: pad, y1: height - pad, x2: width - pad / 2, y2: height - pad, class: 'chart-axis' }));
+  const groupW = (width - padX * 2) / Math.max(1, items.length);
+  for (let i = 0; i <= 4; i++) {
+    const y = padTop + plotH * (i / 4);
+    svg.appendChild(svgEl('line', { x1: padX, y1: y, x2: width - padX / 2, y2: y, class: i === 4 ? 'chart-axis' : 'chart-grid' }));
+  }
   items.forEach((d, i) => {
-    const x = pad + i * groupW + 8;
-    const barW = Math.max(7, Math.min(18, groupW / 5));
+    const barGap = 3;
+    const barW = Math.max(5, Math.min(16, (groupW - 18 - barGap * 3) / 4));
+    const clusterW = barW * 4 + barGap * 3;
+    const x = padX + i * groupW + Math.max(4, (groupW - clusterW) / 2);
     const vals = [
       { v: d.income?.toshi || 0, cls: 'chart-income-h', label: L('夫収入', 'H income') },
       { v: d.settlement?.husband_final_burden || 0, cls: 'chart-out-h', label: L('夫支出', 'H outgo') },
@@ -115,13 +122,13 @@ function stackedSvg(items: Dash[]): HTMLElement {
       { v: d.household?.total || 0, cls: 'chart-out-w', label: L('家計支出', 'Household') },
     ];
     vals.forEach((r, j) => {
-      const h = Math.max(1, (r.v / max) * (height - pad * 2));
-      const rect = svgEl('rect', { x: x + j * (barW + 3), y: height - pad - h, width: barW, height: h, rx: 5, class: `chart-bar ${r.cls}` });
+      const h = Math.max(2, (r.v / max) * plotH);
+      const rect = svgEl('rect', { x: x + j * (barW + barGap), y: padTop + plotH - h, width: barW, height: h, rx: Math.min(6, barW / 2), class: `chart-bar ${r.cls}` });
       rect.appendChild(svgEl('title'));
       rect.querySelector('title')!.textContent = `${d.month} ${r.label} ${formatYen(r.v)}`;
       svg.appendChild(rect);
     });
-    const text = svgEl('text', { x, y: height - 10, class: 'chart-label' });
+    const text = svgEl('text', { x: padX + i * groupW + groupW / 2, y: height - 14, class: 'chart-label', 'text-anchor': 'middle' });
     text.textContent = d.month.slice(5);
     svg.appendChild(text);
   });
