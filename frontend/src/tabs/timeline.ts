@@ -175,5 +175,30 @@ function timelineCard(owner: OwnerKey, rows: any[]): HTMLElement {
   table.appendChild(tb);
   wrap.appendChild(table);
   card.appendChild(wrap);
+  card.appendChild(timelineMobileList(rows));
   return card;
+}
+
+function timelineMobileList(rows: any[]): HTMLElement {
+  const list = el('div', { class: 'timeline-mobile-list' });
+  if (!rows.length) {
+    list.appendChild(el('div', { class: 'timeline-mobile-row muted' }, [L('\u4e88\u5b9a\u304c\u3042\u308a\u307e\u305b\u3093', 'No events')]));
+    return list;
+  }
+  for (const r of rows) {
+    const amount = Number(r.amount || 0);
+    const balance = Number(r.balance_after || 0);
+    list.appendChild(el('article', { class: 'timeline-mobile-row' }, [
+      el('div', { class: 'timeline-mobile-top' }, [
+        el('span', { class: 'mono' }, [r.date || '']),
+        el('b', { class: amount < 0 ? 'timeline-negative' : 'timeline-positive' }, [formatYen(amount)]),
+      ]),
+      el('div', { class: 'timeline-mobile-label' }, [r.label || r.source || '']),
+      el('div', { class: 'timeline-mobile-balance' }, [
+        el('span', {}, [L('\u5897\u6e1b\u5f8c\u6b8b\u9ad8', 'Balance after delta')]),
+        el('strong', {}, [formatYen(balance)]),
+      ]),
+    ]));
+  }
+  return list;
 }

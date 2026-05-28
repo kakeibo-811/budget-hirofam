@@ -2249,71 +2249,76 @@ textarea {
   min-width: 96px;
 }
 
+.timeline-mobile-list {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .timeline-table-wrap {
-    overflow: visible;
-    border: 0;
-    background: transparent;
-    margin-left: 0;
-    margin-right: 0;
-  }
-
-  .timeline-table {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    border-collapse: separate;
-  }
-
-  .timeline-table thead {
     display: none;
   }
 
-  .timeline-table tbody,
-  .timeline-table tr,
-  .timeline-table td {
-    display: block;
-    width: 100%;
-    box-sizing: border-box;
+  .timeline-mobile-list {
+    display: grid;
+    gap: 10px;
   }
 
-  .timeline-table tr {
-    margin: 0 0 10px;
-    padding: 10px;
+  .timeline-mobile-row {
+    display: grid;
+    gap: 8px;
+    padding: 12px;
     border: 1px solid var(--border);
     border-radius: 12px;
     background: var(--bg-card);
     box-shadow: var(--shadow-sm);
   }
 
-  .timeline-table td {
-    display: grid;
-    grid-template-columns: minmax(72px, 30%) minmax(0, 1fr);
-    gap: 8px;
-    align-items: start;
-    padding: 5px 0;
-    border-bottom: 0;
-    white-space: normal;
+  .timeline-mobile-top,
+  .timeline-mobile-balance {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+  }
+
+  .timeline-mobile-top b,
+  .timeline-mobile-balance strong {
+    flex: 0 0 auto;
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .timeline-mobile-label {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.35;
     overflow-wrap: anywhere;
   }
 
-  .timeline-table td::before {
-    content: attr(data-label);
+  .timeline-mobile-balance {
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .timeline-mobile-balance span {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
   }
 
-  .timeline-table td.num {
-    text-align: right;
+  .timeline-mobile-balance strong {
+    color: var(--text);
+    font-size: 19px;
+    font-weight: 900;
   }
 
-  .timeline-table .timeline-balance {
-    min-width: 0;
-    padding-top: 8px;
-    margin-top: 4px;
-    border-top: 1px solid var(--border);
-    font-size: 17px;
+  .timeline-positive {
+    color: var(--positive);
+  }
+
+  .timeline-negative {
+    color: #d63d59;
   }
 }
 
