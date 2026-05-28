@@ -296,32 +296,6 @@ function makeForecast(owner: Owner, events: CashEvent[], opening: number) {
   return { owner, opening_balance: opening, ending_balance: balance, minimum_balance: minBalance, lowest_date: minDate, shortfall: Math.max(0, -minBalance), timeline };
 }
 
-function cardPaymentEvents(expenses: any[]): CashEvent[] {
-  const grouped = new Map<string, CashEvent & { count: number }>();
-  for (const r of expenses) {
-    if (!r.card_id) continue;
-    if (inferBurdenOwner(r) === 'other') continue;
-    const owner = inferActualPayer(r);
-    const date = r.payment_due_date || r.date;
-    const cardName = String(r.card_name || `Card ${r.card_id}`).trim();
-    const key = [date, owner, r.card_id || cardName].join('|');
-    const current = grouped.get(key) || {
-      date,
-      owner,
-      amount: 0,
-      kind: 'payment' as const,
-      label: `${cardName} card payment`,
-      source: 'card_payment',
-      count: 0,
-    };
-    current.amount -= Number(r.amount || 0);
-    current.count += 1;
-    current.label = `${cardName} card payment (${current.count})`;
-    grouped.set(key, current);
-  }
-  return Array.from(grouped.values()).map(({ count, ...event }) => event);
-}
-
 app.get('/dashboard/:month', async (c) => {
   const month = c.req.param('month');
   const appSettings = await getAppSettings(c.env.DB);
@@ -490,9 +464,7 @@ app.get('/dashboard/:month', async (c) => {
   const cashEvents: CashEvent[] = [];
   for (const x of incomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'income', source: 'income' });
   for (const x of recurringIncomeRows) cashEvents.push({ date: x.date, owner: ownerValue(x.owner), amount: Number(x.amount || 0), kind: 'income', label: x.description || 'recurring income', source: 'recurring_income' });
-  for (const event of cardPaymentEvents(rows)) cashEvents.push(event);
   for (const r of rows) {
-    if (r.card_id) continue;
     const burden = inferBurdenOwner(r);
     if (burden === 'other') continue;
     cashEvents.push({ date: r.payment_due_date || r.date, owner: inferActualPayer(r), amount: -Number(r.amount || 0), kind: 'payment', label: r.description, source: 'expense' });
@@ -576,9 +548,7 @@ app.get('/cashflow-range', async (c) => {
          AND LOWER(COALESCE(e.category, '')) NOT IN ('loan', 'loan_repayment')
        ORDER BY COALESCE(e.payment_due_date, e.date) ASC, e.id ASC`, [month]);
     const deduped = dedupePlannedAgainstActuals(expenses, await scheduledOccurrences(c.env.DB, period, month), await fixedOccurrences(c.env.DB, month));
-    for (const event of cardPaymentEvents(expenses)) pushEvent(event);
     for (const r of expenses) {
-      if (r.card_id) continue;
       if (inferBurdenOwner(r) === 'other') continue;
       pushEvent({ date: r.payment_due_date || r.date, owner: inferActualPayer(r), amount: -Number(r.amount || 0), kind: 'payment', label: r.description, source: 'expense' });
     }
