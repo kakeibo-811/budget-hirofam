@@ -324,8 +324,17 @@ function cardPaymentEvents(expenses: any[]): CashEvent[] {
 
 async function mortgagePaymentEvents(db: D1Database, from: string, to: string): Promise<CashEvent[]> {
   const projection = await projectionFromDb(db, from, to);
+  const mortgageAmount = Math.max(0, ...(projection.rows || []).map((row: any) => Number(row.mortgage_payment || 0)));
+  const fixedWindow = await mortgageFixedWindow(db, mortgageAmount);
   return (projection.rows || [])
     .filter((row: any) => Number(row.mortgage_payment || 0) > 0)
+    .filter((row: any) => {
+      if (!fixedWindow) return true;
+      const month = String(row.month || row.payment_date || '').slice(0, 7);
+      if (fixedWindow.from && month < fixedWindow.from) return false;
+      if (fixedWindow.to && month > fixedWindow.to) return false;
+      return true;
+    })
     .map((row: any) => ({
       date: row.payment_date,
       owner: 'shared' as Owner,
@@ -334,6 +343,20 @@ async function mortgagePaymentEvents(db: D1Database, from: string, to: string): 
       label: 'Mortgage payment',
       source: 'mortgage_payment',
     }));
+}
+
+async function mortgageFixedWindow(db: D1Database, mortgageAmount: number): Promise<{ from: string; to: string } | null> {
+  const rows = await selectAll<any>(db, `SELECT name, category, amount, active_from_month, active_to_month FROM fixed_costs WHERE archived_at IS NULL`);
+  const candidates = rows.filter((row) => {
+    const name = compactText(`${row.name || ''} ${row.category || ''}`);
+    const namedMortgage = name.includes('mortgage') || name.includes('homeloan') || name.includes('住宅ローン') || name.includes('住宅');
+    const sameAmount = mortgageAmount > 0 && Number(row.amount || 0) === mortgageAmount;
+    return namedMortgage || sameAmount;
+  });
+  if (!candidates.length) return null;
+  const froms = candidates.map((row) => String(row.active_from_month || '')).filter((v) => /^\d{4}-\d{2}$/.test(v)).sort();
+  const tos = candidates.map((row) => String(row.active_to_month || '')).filter((v) => /^\d{4}-\d{2}$/.test(v)).sort();
+  return { from: froms[0] || '', to: tos[tos.length - 1] || '' };
 }
 
 function isMortgageDuplicateFixedCost(fp: any, mortgageEvents: CashEvent[]): boolean {
