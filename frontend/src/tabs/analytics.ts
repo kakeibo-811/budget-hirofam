@@ -403,7 +403,7 @@ function cashflowCard(dash: Dash): HTMLElement {
     metric(L('妻口座不足', 'Wife shortfall'), -(f.lisa?.shortfall || 0), f.lisa?.shortfall ? `${f.lisa.lowest_date} ${L('までに必要', 'needed by')}` : L('ショート見込みなし', 'No shortfall')),
     metric(L('共有口座不足', 'Shared shortfall'), -(f.shared?.shortfall || 0), f.shared?.shortfall ? `${f.shared.lowest_date} ${L('までに必要', 'needed by')}` : L('ショート見込みなし', 'No shortfall')),
   ]));
-  const timeline = f.toshi?.timeline || [];
+  const timeline: any[] = [];
   if (timeline.length > 0) {
     card.appendChild(el('h4', {}, [L('夫口座タイムライン', 'Husband timeline')]));
     card.appendChild(timelineTable(timeline.slice(0, 20)));
