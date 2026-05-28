@@ -29,7 +29,9 @@ export function renderAi(root: HTMLElement) {
         mode: mode.value,
         question: question.value,
       });
-      status.textContent = `${L('使用モデル', 'Model')}: ${res.model}`;
+      status.textContent = res.configured === false
+        ? L('AIキー未設定のため、アプリ内サマリーで表示中', 'Showing local summary because AI key is not configured')
+        : `${L('使用モデル', 'Model')}: ${res.model}`;
       output.textContent = res.answer || L('回答が空でした', 'Empty answer');
     } catch (e: any) {
       status.textContent = `${L('AIを使えません', 'AI unavailable')}: ${e.message}`;

@@ -5,6 +5,7 @@ import { selectAll } from '../db/helpers';
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 type AiMode = 'summary' | 'spec';
+const defaultModel = 'gpt-5.2';
 
 function cleanMonth(v: any): string {
   const s = String(v || '').trim();
@@ -13,6 +14,18 @@ function cleanMonth(v: any): string {
 
 function cleanMode(v: any): AiMode {
   return String(v || '').toLowerCase() === 'spec' ? 'spec' : 'summary';
+}
+
+function yen(n: any): string {
+  return `¥${Math.round(Number(n || 0)).toLocaleString('ja-JP')}`;
+}
+
+function ownerLabel(v: any): string {
+  const s = String(v || '').toLowerCase();
+  if (s === 'toshi') return '夫';
+  if (s === 'lisa') return '妻';
+  if (s === 'shared') return '共通';
+  return 'その他';
 }
 
 async function buildContext(c: any, month: string) {
@@ -58,6 +71,54 @@ async function buildContext(c: any, month: string) {
   };
 }
 
+function localAnswer(mode: AiMode, question: string, context: any): string {
+  const summary = context.computed_summary || {};
+  const largest = (context.largest_expenses || []).slice(0, 5);
+  const fixed = (context.fixed_cost_snapshots || []).slice(0, 5);
+  const accounts = context.accounts || [];
+  if (mode === 'spec') {
+    return [
+      'AIキーが未設定のため、現在はアプリ内データだけで仕様変更案を作っています。',
+      '',
+      `対象月: ${context.month}`,
+      `依頼内容: ${question || '指定なし'}`,
+      '',
+      '進め方:',
+      '1. 変更したい仕様を、対象タブ・入力項目・反映先の数値に分けて整理します。',
+      '2. ダッシュボード、精算、分析、Timeline、資産・負債への影響を確認します。',
+      '3. 元データを壊さない形で、Preview限定で実装・検証します。',
+      '',
+      '確認すべき主な連動先:',
+      `- 収入: ${yen(summary.income_total)}`,
+      `- 明細支出: ${yen(summary.expense_total)}`,
+      `- 固定費: ${yen(summary.fixed_total)}`,
+      `- 口座残高合計: ${yen(summary.account_balance_total)}`,
+      '',
+      '本物のAIを有効化すると、この依頼内容をもとに、より具体的な改修仕様・リスク・テスト観点まで文章化できます。',
+    ].join('\n');
+  }
+  return [
+    'AIキーが未設定のため、現在はアプリ内計算による高速サマリーを表示しています。',
+    '',
+    `対象月: ${context.month}`,
+    `収入合計: ${yen(summary.income_total)}`,
+    `明細支出合計: ${yen(summary.expense_total)}`,
+    `固定費合計: ${yen(summary.fixed_total)}`,
+    `収入 - 支出 - 固定費: ${yen(summary.net_income_minus_expenses)}`,
+    `口座残高合計: ${yen(summary.account_balance_total)}`,
+    '',
+    '大きい支出:',
+    ...(largest.length ? largest.map((e: any) => `- ${e.payment_due_date || e.date || '-'} ${e.description || e.category || '明細'} ${yen(e.amount)} / ${ownerLabel(e.paid_by || e.payer)}`) : ['- 明細なし']),
+    '',
+    '固定費の先頭:',
+    ...(fixed.length ? fixed.map((f: any) => `- ${f.payment_due_date || `${f.month}-${String(f.pay_day || 1).padStart(2, '0')}`} ${f.name || '固定費'} ${yen(f.amount)} / ${ownerLabel(f.paid_by)}`) : ['- 固定費なし']),
+    '',
+    accounts.length ? `口座数: ${accounts.length}` : '口座情報なし',
+    '',
+    '本物のAIを有効化すると、この数字を根拠に、異常値・改善点・仕様変更案まで自然文で分析できます。',
+  ].join('\n');
+}
+
 function systemPrompt(mode: AiMode): string {
   const base = [
     'You are an AI assistant embedded in a Japanese household budgeting app for Toshi and Lisa.',
@@ -95,19 +156,26 @@ function extractText(data: any): string {
 app.get('/status', async (c) => {
   return c.json({
     configured: Boolean(c.env.OPENAI_API_KEY),
-    model: c.env.OPENAI_MODEL || 'gpt-5.4-mini',
+    model: c.env.OPENAI_MODEL || defaultModel,
+    fallback_enabled: true,
   });
 });
 
 app.post('/ask', async (c) => {
-  if (!c.env.OPENAI_API_KEY) {
-    return c.json({ error: 'AI is not configured. Set OPENAI_API_KEY as a Cloudflare Worker secret for Preview.' }, 503);
-  }
   const body = await c.req.json<any>();
   const month = cleanMonth(body.month);
   const mode = cleanMode(body.mode);
   const context = await buildContext(c, month);
-  const model = c.env.OPENAI_MODEL || 'gpt-5.4-mini';
+  if (!c.env.OPENAI_API_KEY) {
+    return c.json({
+      month,
+      mode,
+      configured: false,
+      model: 'local-summary',
+      answer: localAnswer(mode, String(body.question || ''), context),
+    });
+  }
+  const model = c.env.OPENAI_MODEL || defaultModel;
   const res = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -127,7 +195,7 @@ app.post('/ask', async (c) => {
   if (!res.ok) {
     return c.json({ error: data?.error?.message || `OpenAI API error ${res.status}` }, 502);
   }
-  return c.json({ month, mode, model, answer: extractText(data) });
+  return c.json({ month, mode, configured: true, model, answer: extractText(data) });
 });
 
 export default app;
