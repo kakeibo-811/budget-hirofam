@@ -156,6 +156,76 @@ function normalizePayer(input: string | undefined): string {
   return map[raw] || map[lower] || lower || 'other';
 }
 
+function merchantKey(input: any): string {
+  return String(input || '')
+    .toLowerCase()
+    .replace(/[0-9０-９]/g, '')
+    .replace(/[\s_\-.,，．・･／\/\\()[\]（）【】「」『』"'`]/g, '')
+    .slice(0, 80);
+}
+
+function normalizePaymentMethod(input: any): string {
+  const s = String(input || '').trim().toLowerCase();
+  return ['card', 'bank_transfer', 'cash_debit', 'other'].includes(s) ? s : 'card';
+}
+
+function cleanConfidence(input: any): number {
+  return Math.max(1, Math.min(100, Math.round(Number(input || 0))));
+}
+
+async function getClassificationRule(db: D1Database, description: string) {
+  const key = merchantKey(description);
+  if (!key) return null;
+  return await selectOne<any>(db, `SELECT * FROM expense_classification_rules WHERE merchant_key = ? AND archived_at IS NULL`, [key]);
+}
+
+function localClassification(row: ExpenseRow, rule: any | null) {
+  const desc = String(row.description || '');
+  const compact = merchantKey(desc);
+  const fixedWords = ['保険', 'ローン', '家賃', '通信', '電気', 'ガス', '水道', '税', '積立', 'subscription', 'insurance', 'loan'];
+  const fixedCandidate = fixedWords.some((w) => desc.toLowerCase().includes(w.toLowerCase()));
+  if (rule) {
+    return {
+      paid_by: rule.paid_by || row.paid_by || 'toshi',
+      burden_owner: rule.burden_owner || row.burden_owner || row.payer || 'shared',
+      payment_method: rule.payment_method || row.payment_method || (row.card_id ? 'card' : 'other'),
+      fixed_candidate: Boolean(rule.fixed_candidate),
+      confidence: cleanConfidence(rule.confidence || 92),
+      reason: '過去に確定した同じ加盟店ルールを使用',
+      rule_id: rule.id,
+    };
+  }
+  return {
+    paid_by: row.paid_by || (row.card_id ? 'toshi' : 'toshi'),
+    burden_owner: row.burden_owner || row.payer || 'shared',
+    payment_method: row.payment_method || (row.card_id ? 'card' : 'other'),
+    fixed_candidate: fixedCandidate,
+    confidence: compact ? (fixedCandidate ? 72 : 58) : 40,
+    reason: fixedCandidate ? '名称から固定費候補として推定' : '既存明細の値をベースにした暫定候補',
+    rule_id: null,
+  };
+}
+
+function parseAiClassification(text: string, fallback: any) {
+  try {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const parsed = JSON.parse(text.slice(start, end + 1));
+      return {
+        paid_by: normalizePayer(parsed.paid_by || fallback.paid_by),
+        burden_owner: normalizePayer(parsed.burden_owner || fallback.burden_owner),
+        payment_method: normalizePaymentMethod(parsed.payment_method || fallback.payment_method),
+        fixed_candidate: Boolean(parsed.fixed_candidate ?? fallback.fixed_candidate),
+        confidence: cleanConfidence(parsed.confidence || fallback.confidence),
+        reason: String(parsed.reason || fallback.reason || ''),
+        rule_id: fallback.rule_id || null,
+      };
+    }
+  } catch {}
+  return fallback;
+}
+
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return '';
   const s = String(v);
@@ -450,6 +520,100 @@ app.get('/export.csv', async (c) => {
   return new Response(BOM + [headers.map(csvEscape).join(','), ...body.map((r) => r.map(csvEscape).join(','))].join('\n') + '\n', {
     headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="expenses-${month || 'all'}.csv"` },
   });
+});
+
+app.post('/:id/classify', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await selectOne<ExpenseRow>(c.env.DB, `SELECT e.*, c.name AS card_name, c.close_day, c.pay_day FROM expenses e LEFT JOIN cards c ON e.card_id = c.id WHERE e.id = ? AND e.archived_at IS NULL`, [id]);
+  if (!row) return c.json({ error: 'not found' }, 404);
+  const rule = await getClassificationRule(c.env.DB, row.description);
+  const fallback = localClassification(row, rule);
+  if (!c.env.OPENAI_API_KEY) {
+    return c.json({ item: row, suggestion: fallback, configured: false, model: 'local-rule' });
+  }
+  const model = c.env.OPENAI_MODEL || 'gpt-5.2';
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${c.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: 'system',
+          content: [
+            'You classify a household credit-card/bank expense for Toshi and Lisa.',
+            'Return only JSON with paid_by, burden_owner, payment_method, fixed_candidate, confidence, reason.',
+            'Allowed paid_by and burden_owner: toshi, lisa, shared, other.',
+            'Allowed payment_method: card, bank_transfer, cash_debit, other.',
+            'Do not classify by category. Focus on payer, burden owner, payment method, and fixed/recurring likelihood.',
+            'Do not invent facts; use the row and past confirmed rule if provided.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            row: {
+              date: row.date,
+              amount: row.amount,
+              description: row.description,
+              card_name: row.card_name,
+              current_paid_by: row.paid_by,
+              current_burden_owner: row.burden_owner || row.payer,
+              current_payment_method: row.payment_method || (row.card_id ? 'card' : null),
+            },
+            confirmed_rule: rule,
+            fallback,
+          }),
+        },
+      ],
+      max_output_tokens: 500,
+    }),
+  });
+  const data = await res.json<any>();
+  if (!res.ok) return c.json({ error: data?.error?.message || `OpenAI API error ${res.status}` }, 502);
+  const text = typeof data.output_text === 'string'
+    ? data.output_text
+    : (data.output || []).flatMap((x: any) => x.content || []).map((x: any) => x.text || '').join('\n');
+  return c.json({ item: row, suggestion: parseAiClassification(text, fallback), configured: true, model });
+});
+
+app.post('/:id/classification/confirm', async (c) => {
+  const id = Number(c.req.param('id'));
+  const row = await selectOne<ExpenseRow>(c.env.DB, `SELECT * FROM expenses WHERE id = ? AND archived_at IS NULL`, [id]);
+  if (!row) return c.json({ error: 'not found' }, 404);
+  const b = await c.req.json<any>();
+  const paidBy = normalizePayer(b.paid_by || row.paid_by || 'toshi');
+  const burdenOwner = normalizePayer(b.burden_owner || row.burden_owner || row.payer || 'shared');
+  const paymentMethod = normalizePaymentMethod(b.payment_method || row.payment_method || (row.card_id ? 'card' : 'other'));
+  const fixedCandidate = b.fixed_candidate ? 1 : 0;
+  const confidence = cleanConfidence(b.confidence || 90);
+  await exec(
+    c.env.DB,
+    `UPDATE expenses SET paid_by = ?, burden_owner = ?, payer = ?, payment_method = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [paidBy, burdenOwner, burdenOwner, paymentMethod, id]
+  );
+  const key = merchantKey(row.description);
+  if (key) {
+    await c.env.DB.prepare(
+      `INSERT INTO expense_classification_rules
+       (merchant_key, description_sample, paid_by, burden_owner, payment_method, fixed_candidate, confidence, source, usage_count, last_used_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed', 1, CURRENT_TIMESTAMP)
+       ON CONFLICT(merchant_key) WHERE archived_at IS NULL DO UPDATE SET
+         description_sample = excluded.description_sample,
+         paid_by = excluded.paid_by,
+         burden_owner = excluded.burden_owner,
+         payment_method = excluded.payment_method,
+         fixed_candidate = excluded.fixed_candidate,
+         confidence = excluded.confidence,
+         usage_count = expense_classification_rules.usage_count + 1,
+         last_used_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP`
+    ).bind(key, row.description, paidBy, burdenOwner, paymentMethod, fixedCandidate, confidence).run();
+  }
+  return c.json({ ok: true, rule_key: key });
 });
 
 app.get('/:id', async (c) => {

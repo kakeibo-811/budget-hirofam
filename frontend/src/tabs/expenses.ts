@@ -94,6 +94,41 @@ function paymentMethodSelect(value?: string | null): HTMLSelectElement {
   return s;
 }
 
+function renderClassificationSuggestion(ex: Expense, suggestion: any, onConfirm: (payload: any) => Promise<void>, onCancel: () => void): HTMLElement {
+  const paidBy = ownerSelect(suggestion.paid_by || ex.paid_by || 'toshi');
+  const burden = ownerSelect(suggestion.burden_owner || ex.burden_owner || ex.payer || 'shared');
+  const method = paymentMethodSelect(suggestion.payment_method || ex.payment_method || (ex.card_id ? 'card' : 'other'));
+  const fixed = el('input', { type: 'checkbox', checked: suggestion.fixed_candidate ? 'checked' : null }) as HTMLInputElement;
+  const confidence = Number(suggestion.confidence || 0);
+  return el('div', { class: 'card inline-editor ai-classification-box' }, [
+    el('h3', {}, [L('AI分類候補', 'AI classification suggestion')]),
+    el('p', { class: 'muted' }, [suggestion.reason || L('候補を確認して確定してください', 'Review and confirm the suggestion')]),
+    el('div', { class: 'analytics-metrics' }, [
+      el('div', { class: 'metric' }, [el('div', { class: 'metric-label' }, [L('信頼度', 'Confidence')]), el('div', { class: 'metric-value' }, [`${confidence}%`])]),
+      el('div', { class: 'metric' }, [el('div', { class: 'metric-label' }, [L('明細', 'Item')]), el('div', { class: 'metric-value' }, [formatYen(ex.amount)])]),
+      el('div', { class: 'metric' }, [el('div', { class: 'metric-label' }, [L('支払日', 'Payment date')]), el('div', { class: 'metric-value' }, [ex.payment_due_date || ex.date])]),
+    ]),
+    el('div', { class: 'form-grid' }, [
+      el('label', { class: 'field' }, [el('span', {}, [L('実支払者', 'Paid by')]), paidBy]),
+      el('label', { class: 'field' }, [el('span', {}, [L('負担者', 'Burden owner')]), burden]),
+      el('label', { class: 'field' }, [el('span', {}, [L('支払方法', 'Payment method')]), method]),
+      el('label', { class: 'field-inline' }, [fixed, L(' 固定費候補として覚える', ' Remember as fixed/recurring candidate')]),
+    ]),
+    el('div', { class: 'row-flex' }, [
+      button(L('この分類で確定', 'Confirm classification'), async () => {
+        await onConfirm({
+          paid_by: paidBy.value,
+          burden_owner: burden.value,
+          payment_method: method.value,
+          fixed_candidate: fixed.checked,
+          confidence,
+        });
+      }, 'btn'),
+      button(t('common.cancel'), onCancel),
+    ]),
+  ]);
+}
+
 function renderPreview(rows: ExpenseImportRow[], warnings: string[], onRowsChange?: () => void): HTMLElement {
   const box = el('div', { class: 'card' }, [el('h3', {}, [L('取り込みプレビュー', 'Import Preview')])]);
   if (warnings.length) box.appendChild(el('div', { class: 'banner banner-warn' }, [warnings.join(' / ')]));
@@ -406,6 +441,25 @@ export function renderExpenses(root: HTMLElement) {
       if (!data.items.length) tbody.appendChild(el('tr', {}, [el('td', { colspan: '13', class: 'muted' }, [t('common.no_data')])]));
       for (const ex of data.items) {
         const actionsCell = el('td', { class: 'table-actions sticky-actions' });
+        actionsCell.appendChild(button(L('AI分類', 'AI classify'), async () => {
+          clear(editBox);
+          editBox.appendChild(el('div', { class: 'muted' }, [L('AI分類候補を作成中...', 'Creating classification suggestion...')]));
+          try {
+            const res = await api.post<any>(`/api/expenses/${ex.id}/classify`, {});
+            clear(editBox);
+            const box = renderClassificationSuggestion(ex, res.suggestion || {}, async (payload) => {
+              await api.post<any>(`/api/expenses/${ex.id}/classification/confirm`, payload);
+              showStatus(L('AI分類を確定し、次回用ルールとして保存しました。', 'Classification confirmed and saved as a future rule.'), 'info');
+              clear(editBox);
+              await load(picker.get());
+            }, () => clear(editBox));
+            editBox.appendChild(box);
+            box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (e: any) {
+            clear(editBox);
+            editBox.appendChild(el('div', { class: 'banner banner-error' }, [`${L('AI分類失敗', 'AI classification failed')}: ${e.message}`]));
+          }
+        }, 'btn'));
         actionsCell.appendChild(button(t('common.edit'), () => {
           clear(editBox);
           const card = el('div', { class: 'card inline-editor' }, [el('h3', {}, [L('明細を編集', 'Edit expense')])]);
